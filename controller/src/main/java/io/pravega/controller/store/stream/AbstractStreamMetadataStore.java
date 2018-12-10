@@ -593,16 +593,14 @@ public abstract class AbstractStreamMetadataStore implements StreamMetadataStore
                                                           final UUID txId, final OperationContext context,
                                                           final Executor executor) {
         Stream stream = getStream(scope, streamName, context);
-        CompletableFuture<TxnStatus> future = withCompletion(stream.commitTransaction(txId), executor);
-
-        future.thenCompose(result -> {
-            return stream.getNumberOfOngoingTransactions().thenAccept(count -> {
-                DYNAMIC_LOGGER.incCounterValue(nameFromStream(COMMIT_TRANSACTION, scope, streamName), 1);
-                DYNAMIC_LOGGER.reportGaugeValue(nameFromStream(OPEN_TRANSACTIONS, scope, streamName), count);
-            });
-        });
-
-        return future;
+        return withCompletion(stream.commitTransaction(txId), executor)
+                .thenApply(result -> {
+                    stream.getNumberOfOngoingTransactions().thenAccept(count -> {
+                        DYNAMIC_LOGGER.incCounterValue(nameFromStream(COMMIT_TRANSACTION, scope, streamName), 1);
+                        DYNAMIC_LOGGER.reportGaugeValue(nameFromStream(OPEN_TRANSACTIONS, scope, streamName), count);
+                    });
+                    return result;
+                });
     }
 
     @Override
@@ -622,15 +620,14 @@ public abstract class AbstractStreamMetadataStore implements StreamMetadataStore
                                                          final UUID txId, final OperationContext context,
                                                          final Executor executor) {
         Stream stream = getStream(scope, streamName, context);
-        CompletableFuture<TxnStatus> future = withCompletion(stream.abortTransaction(txId), executor);
-        future.thenApply(result -> {
-            stream.getNumberOfOngoingTransactions().thenAccept(count -> {
-                DYNAMIC_LOGGER.incCounterValue(nameFromStream(ABORT_TRANSACTION, scope, streamName), 1);
-                DYNAMIC_LOGGER.reportGaugeValue(nameFromStream(OPEN_TRANSACTIONS, scope, streamName), count);
-            });
-            return result;
-        });
-        return future;
+        return withCompletion(stream.abortTransaction(txId), executor)
+                .thenApply(result -> {
+                    stream.getNumberOfOngoingTransactions().thenAccept(count -> {
+                        DYNAMIC_LOGGER.incCounterValue(nameFromStream(ABORT_TRANSACTION, scope, streamName), 1);
+                        DYNAMIC_LOGGER.reportGaugeValue(nameFromStream(OPEN_TRANSACTIONS, scope, streamName), count);
+                    });
+                    return result;
+                });
     }
 
     @Override
