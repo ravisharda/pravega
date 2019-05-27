@@ -10,6 +10,8 @@
 package io.pravega.local;
 
 import com.google.common.base.Preconditions;
+import io.pravega.client.stream.impl.Credentials;
+import io.pravega.client.stream.impl.DefaultCredentials;
 import io.pravega.common.auth.ZKTLSUtils;
 import com.google.common.base.Strings;
 import io.pravega.controller.server.ControllerServiceConfig;
@@ -147,6 +149,13 @@ public class InProcPravegaCluster implements AutoCloseable {
                             && !Strings.isNullOrEmpty(this.keyPasswordFile)),
                     "TLS enabled, but not all parameters set");
 
+            // Check Auth related parameters
+            /*Preconditions.checkState(!enableAuth ||
+                    (!Strings.isNullOrEmpty(this.userName),
+                    && !Strings.isNullOrEmpty(this.passwd),
+                    && !Strings.isNullOrEmpty(this.pas)
+                    "TLS enabled, but not all parameters set");*/
+
             if (this.isInMemStorage) {
                 this.isInProcHDFS = false;
             }
@@ -256,15 +265,13 @@ public class InProcPravegaCluster implements AutoCloseable {
      * @param segmentStoreId id of the SegmentStore.
      */
     private void startLocalSegmentStore(int segmentStoreId) throws Exception {
-        Properties authProps = new Properties();
-        authProps.setProperty("pravega.client.auth.method", "Default");
-        authProps.setProperty("pravega.client.auth.userName", "arvind");
-        authProps.setProperty("pravega.client.auth.password", "1111_aaaa");
+        if (this.enableAuth) {
+            setAuthSystemProperties();
+        }
 
         ServiceBuilderConfig.Builder configBuilder = ServiceBuilderConfig
                 .builder()
                 .include(System.getProperties())
-                .include(authProps)
                 .include(ServiceConfig.builder()
                         .with(ServiceConfig.CONTAINER_COUNT, containerCount)
                         .with(ServiceConfig.THREAD_POOL_SIZE, THREADPOOL_SIZE)
@@ -302,6 +309,18 @@ public class InProcPravegaCluster implements AutoCloseable {
 
         nodeServiceStarter[segmentStoreId] = new ServiceStarter(configBuilder.build());
         nodeServiceStarter[segmentStoreId].start();
+    }
+
+    private void setAuthSystemProperties() {
+        if (Strings.isNullOrEmpty(System.getProperty("pravega.client.auth.method"))
+            || Strings.isNullOrEmpty(System.getenv("pravega_client_auth_method"))) {
+            log.debug("Auth params already specified via system properties or environment variables.");
+        } else {
+            Credentials credentials = new DefaultCredentials(this.passwd, this.userName);
+            System.setProperty("pravega.client.auth.loadDynamic", "false");
+            System.setProperty("pravega.client.auth.method", credentials.getAuthenticationType());
+            System.setProperty("pravega.client.auth.token", credentials.getAuthenticationToken());
+        }
     }
 
     private void startLocalControllers() {
