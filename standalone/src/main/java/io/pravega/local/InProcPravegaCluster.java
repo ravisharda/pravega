@@ -42,7 +42,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.UUID;
 import javax.annotation.concurrent.GuardedBy;
 import lombok.Builder;
