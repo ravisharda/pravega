@@ -10,6 +10,9 @@
 package io.pravega.client;
 
 import io.pravega.client.stream.impl.Credentials;
+
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import org.junit.Test;
 
@@ -36,11 +39,30 @@ public class CredentialsExtractorTest {
     }
 
     @Test
-    public void explicitlySpecifiedCredentialsIsNotOverridden() {
+    public void extractsCredentialsFromEnvVariables() {
+        Map authEnvVariables = new HashMap();
+        authEnvVariables.put("pravega_client_auth_method", "amethod");
+        authEnvVariables.put("pravega_client_auth_token", "atoken");
 
+        ClientConfig clientConfig = ClientConfig.builder().extractCredentials(null, authEnvVariables).build();
+        Credentials credentials = clientConfig.getCredentials();
+
+        assertNotNull(credentials);
+        assertNotNull("io.pravega.client.ClientConfig$ClientConfigBuilder$1",
+                credentials.getClass());
+        assertEquals("amethod", credentials.getAuthenticationType());
+        assertEquals("atoken", credentials.getAuthenticationToken());
+    }
+
+    @Test
+    public void explicitlySpecifiedCredentialsIsNotOverridden() {
         Properties properties = new Properties();
         properties.setProperty("pravega.client.auth.method", "amethod");
         properties.setProperty("pravega.client.auth.token", "atoken");
+
+        Map authEnvVariables = new HashMap();
+        authEnvVariables.put("pravega_client_auth_method", "amethod");
+        authEnvVariables.put("pravega_client_auth_token", "atoken");
 
         ClientConfig clientConfig = ClientConfig.builder()
                 .credentials(new Credentials() {
@@ -53,7 +75,7 @@ public class CredentialsExtractorTest {
                     public String getAuthenticationToken() {
                         return "tokenSpecifiedViaExplicitObject";
                     }
-                }).extractCredentials(properties, null)
+                }).extractCredentials(properties, authEnvVariables)
                 .build();
 
         assertEquals("Explicitly set credentials should not be overridden", "typeSpecifiedViaExplicitObject",
@@ -81,13 +103,38 @@ public class CredentialsExtractorTest {
     }
 
     @Test
+    public void loadsAGenericCredentialsObjectFromEnvVariablesIfLoadDynamicIsFalse() {
+        Map authEnvVariables = new HashMap();
+        authEnvVariables.put("pravega_client_auth_loadDynamic", "false");
+        authEnvVariables.put("pravega_client_auth_method", "amethod");
+        authEnvVariables.put("pravega_client_auth_token", "atoken");
+
+        ClientConfig clientConfig =
+                ClientConfig.builder().extractCredentials(null, authEnvVariables).build();
+        Credentials credentials = clientConfig.getCredentials();
+
+        assertNotNull(credentials);
+        assertNotNull("io.pravega.client.ClientConfig$ClientConfigBuilder$1",
+                credentials.getClass());
+        assertEquals("amethod", credentials.getAuthenticationType());
+        assertEquals("atoken", credentials.getAuthenticationToken());
+    }
+
+    @Test
     public void doesNotLoadCredentialsOfNonExistentClassIfLoadDynamicIsTrue() {
         Properties properties = new Properties();
         properties.setProperty("pravega.client.auth.loadDynamic", "true");
         properties.setProperty("pravega.client.auth.method", "amethod");
         properties.setProperty("pravega.client.auth.token", "atoken");
 
-        ClientConfig clientConfig = ClientConfig.builder().extractCredentials(properties, null).build();
+        Map authEnvVariables = new HashMap();
+        authEnvVariables.put("pravega_client_auth_loadDynamic", "true");
+        authEnvVariables.put("pravega_client_auth_method", "amethod");
+        authEnvVariables.put("pravega_client_auth_token", "atoken");
+
+        ClientConfig clientConfig = ClientConfig.builder()
+                    .extractCredentials(properties, authEnvVariables)
+                .build();
 
         // Expecting a null because there is no Credentials implementation in the classpath that registers an
         // authentication type "amethod".
@@ -95,12 +142,29 @@ public class CredentialsExtractorTest {
     }
 
     @Test
-    public void loadsCredentialsOfExistentClassIfLoadDynamicIsTrue() {
+    public void loadsCredentialsSpecifiedAsPropertiesUsingRegisteredTypeIfLoadDynamicIsTrue() {
         Properties properties = new Properties();
         properties.setProperty("pravega.client.auth.loadDynamic", "true");
         properties.setProperty("pravega.client.auth.method", "Bearer");
 
         ClientConfig clientConfig = ClientConfig.builder().extractCredentials(properties, null).build();
+        Credentials credentials = clientConfig.getCredentials();
+
+        assertNotNull("Credentials is null", credentials);
+        assertNotNull(DynamicallyLoadedCreds.class.getName(), credentials.getClass());
+        assertEquals("Expected a different authentication type", "Bearer",
+                credentials.getAuthenticationType());
+    }
+
+    @Test
+    public void loadsCredentialsSpecifiedAsEnvVariablesUsingRegisteredTypeIfLoadDynamicIsTrue() {
+        Map authEnvVariables = new HashMap();
+        authEnvVariables.put("pravega_client_auth_loadDynamic", "true");
+        authEnvVariables.put("pravega_client_auth_method", "Bearer");
+
+        ClientConfig clientConfig = ClientConfig.builder()
+                   .extractCredentials(null, authEnvVariables)
+                .build();
         Credentials credentials = clientConfig.getCredentials();
 
         assertNotNull("Credentials is null", credentials);
