@@ -311,15 +311,24 @@ public class InProcPravegaCluster implements AutoCloseable {
     }
 
     private void setAuthSystemProperties() {
-        if (Strings.isNullOrEmpty(System.getProperty("pravega.client.auth.method"))
-            || Strings.isNullOrEmpty(System.getenv("pravega_client_auth_method"))) {
+        if (authPropertiesAlreadySet()) {
             log.debug("Auth params already specified via system properties or environment variables.");
         } else {
-            Credentials credentials = new DefaultCredentials(this.passwd, this.userName);
-            System.setProperty("pravega.client.auth.loadDynamic", "false");
-            System.setProperty("pravega.client.auth.method", credentials.getAuthenticationType());
-            System.setProperty("pravega.client.auth.token", credentials.getAuthenticationToken());
+            if (!Strings.isNullOrEmpty(this.userName)) {
+                Credentials credentials = new DefaultCredentials(this.passwd, this.userName);
+                System.setProperty("pravega.client.auth.loadDynamic", "false");
+                System.setProperty("pravega.client.auth.method", credentials.getAuthenticationType());
+                System.setProperty("pravega.client.auth.token", credentials.getAuthenticationToken());
+                log.debug("Done setting auth params via system properties.");
+            } else {
+                log.debug("Cannot set auth params as username is null or empty");
+            }
         }
+    }
+
+    private boolean authPropertiesAlreadySet() {
+        return !Strings.isNullOrEmpty(System.getProperty("pravega.client.auth.method"))
+                || !Strings.isNullOrEmpty(System.getenv("pravega_client_auth_method"));
     }
 
     private void startLocalControllers() {
