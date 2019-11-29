@@ -49,7 +49,7 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.apache.bookkeeper.client.BKException;
 import org.apache.bookkeeper.client.BookKeeper;
-import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.client.api.WriteHandle;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.data.Stat;
@@ -226,7 +226,7 @@ class BookKeeperLog implements DurableDataLog {
             }
 
             // Create new ledger.
-            LedgerHandle newLedger = Ledgers.create(this.bookKeeper, this.config);
+            WriteHandle newLedger = Ledgers.create(this.bookKeeper, this.config);
             log.info("{}: Created Ledger {}.", this.traceObjectId, newLedger.getId());
 
             // Update Metadata with new Ledger and persist to ZooKeeper.
@@ -451,7 +451,19 @@ class BookKeeperLog implements DurableDataLog {
                 }
 
                 // Invoke the BookKeeper write.
-                w.getWriteLedger().ledger.asyncAddEntry(w.data.array(), w.data.arrayOffset(), w.data.getLength(), this::addCallback, w);
+                w.getWriteLedger().ledger
+                        .appendAsync(w.data.array(), w.data.arrayOffset(), w.data.getLength())
+                        .whenComplete((entryId, error) -> {
+                            int rc = BKException.Code.OK;
+                            if (error != null) {
+                                if (error instanceof BKException) {
+                                    rc = ((BKException) error).getCode();
+                                } else {
+                                    rc = BKException.Code.WriteException;
+                                }
+                            }
+                            addCallback(rc, w.getWriteLedger().ledger, entryId, w);
+                        });
             } catch (Throwable ex) {
                 // Synchronous failure (or RetriesExhausted). Fail current write.
                 boolean isFinal = !isRetryable(ex);
@@ -551,7 +563,7 @@ class BookKeeperLog implements DurableDataLog {
      * @param entryId Assigned EntryId.
      * @param ctx     Write Context. In our case, the Write we were writing.
      */
-    private void addCallback(int rc, LedgerHandle handle, long entryId, Object ctx) {
+    private void addCallback(int rc, WriteHandle handle, long entryId, Object ctx) {
         Write write = (Write) ctx;
         try {
             assert handle.getId() == write.getWriteLedger().ledger.getId()
@@ -739,7 +751,7 @@ class BookKeeperLog implements DurableDataLog {
      * @return A new instance of the LogMetadata, which includes the new ledger.
      * @throws DurableDataLogException If an Exception occurred.
      */
-    private LogMetadata updateMetadata(LogMetadata currentMetadata, LedgerHandle newLedger, boolean clearEmptyLedgers) throws DurableDataLogException {
+    private LogMetadata updateMetadata(LogMetadata currentMetadata, WriteHandle newLedger, boolean clearEmptyLedgers) throws DurableDataLogException {
         boolean create = currentMetadata == null;
         if (create) {
             // This is the first ledger ever in the metadata.
@@ -849,7 +861,7 @@ class BookKeeperLog implements DurableDataLog {
 
         try {
             // Create new ledger.
-            LedgerHandle newLedger = Ledgers.create(this.bookKeeper, this.config);
+            WriteHandle newLedger = Ledgers.create(this.bookKeeper, this.config);
             log.debug("{}: Rollover: created new ledger {}.", this.traceObjectId, newLedger.getId());
 
             // Update the metadata.
@@ -860,7 +872,7 @@ class BookKeeperLog implements DurableDataLog {
             log.debug("{}: Rollover: updated metadata '{}.", this.traceObjectId, metadata);
 
             // Update pointers to the new ledger and metadata.
-            LedgerHandle oldLedger;
+            WriteHandle oldLedger;
             synchronized (this.lock) {
                 oldLedger = this.writeLedger.ledger;
                 if (!oldLedger.isClosed()) {

@@ -19,7 +19,13 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import org.apache.bookkeeper.client.BKException;
 import org.apache.bookkeeper.client.BookKeeper;
+import org.apache.bookkeeper.client.BKException.BKNotEnoughBookiesException;
 import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.client.api.DigestType;
+import org.apache.bookkeeper.client.api.Handle;
+import org.apache.bookkeeper.client.api.ReadHandle;
+import org.apache.bookkeeper.client.api.WriteHandle;
+import org.apache.bookkeeper.common.concurrent.FutureUtils;
 
 /**
  * General utilities pertaining to BookKeeper Ledgers.
@@ -31,7 +37,7 @@ final class Ledgers {
      * How many ledgers to fence out (from the end of the list) when acquiring lock.
      */
     static final int MIN_FENCE_LEDGER_COUNT = 2;
-    private static final BookKeeper.DigestType LEDGER_DIGEST_TYPE = BookKeeper.DigestType.MAC;
+    private static final DigestType LEDGER_DIGEST_TYPE = DigestType.MAC;
 
     /**
      * Creates a new Ledger in BookKeeper.
@@ -42,19 +48,22 @@ final class Ledgers {
      *                                      inside it.
      * @throws DurableDataLogException      If another exception occurred. The causing exception is wrapped inside it.
      */
-    static LedgerHandle create(BookKeeper bookKeeper, BookKeeperConfig config) throws DurableDataLogException {
+    static WriteHandle create(BookKeeper bookKeeper, BookKeeperConfig config) throws DurableDataLogException {
         try {
             return Exceptions.handleInterruptedCall(() ->
-                    bookKeeper.createLedger(
-                            config.getBkEnsembleSize(),
-                            config.getBkWriteQuorumSize(),
-                            config.getBkAckQuorumSize(),
-                            LEDGER_DIGEST_TYPE,
-                            config.getBKPassword()));
+                    FutureUtils.result(bookKeeper.newCreateLedgerOp()
+                            .withEnsembleSize(config.getBkEnsembleSize())
+                            .withWriteQuorumSize(config.getBkWriteQuorumSize())
+                            .withAckQuorumSize(config.getBkAckQuorumSize())
+                            .withDigestType(LEDGER_DIGEST_TYPE)
+                            .withPassword(config.getBKPassword())
+                            .execute()));
         } catch (BKException.BKNotEnoughBookiesException bkEx) {
             throw new DataLogNotAvailableException("Unable to create new BookKeeper Ledger.", bkEx);
         } catch (BKException bkEx) {
             throw new DurableDataLogException("Unable to create new BookKeeper Ledger.", bkEx);
+        } catch (Exception ex) {
+            throw new DurableDataLogException("Unable to create new BookKeeper Ledger.", ex);
         }
     }
 
@@ -67,12 +76,20 @@ final class Ledgers {
      * @return A LedgerHandle for the newly opened ledger.
      * @throws DurableDataLogException If an exception occurred. The causing exception is wrapped inside it.
      */
-    static LedgerHandle openFence(long ledgerId, BookKeeper bookKeeper, BookKeeperConfig config) throws DurableDataLogException {
+    static ReadHandle openFence(long ledgerId, BookKeeper bookKeeper, BookKeeperConfig config) throws DurableDataLogException {
         try {
             return Exceptions.handleInterruptedCall(
-                    () -> bookKeeper.openLedger(ledgerId, LEDGER_DIGEST_TYPE, config.getBKPassword()));
+                    () -> FutureUtils.result(bookKeeper
+                            .newOpenLedgerOp()
+                            .withLedgerId(ledgerId)
+                            .withDigestType(LEDGER_DIGEST_TYPE)
+                            .withPassword(config.getBKPassword())
+                            .withRecovery(true)
+                            .execute()));
         } catch (BKException bkEx) {
             throw new DurableDataLogException(String.format("Unable to open-fence ledger %d.", ledgerId), bkEx);
+        } catch (Exception e) {
+            throw new DurableDataLogException(String.format("Unable to open-fence ledger %d.", ledgerId), e);
         }
     }
 
@@ -85,12 +102,18 @@ final class Ledgers {
      * @return A LedgerHandle for the newly opened ledger.
      * @throws DurableDataLogException If an exception occurred. The causing exception is wrapped inside it.
      */
-    static LedgerHandle openRead(long ledgerId, BookKeeper bookKeeper, BookKeeperConfig config) throws DurableDataLogException {
+    static ReadHandle openRead(long ledgerId, BookKeeper bookKeeper, BookKeeperConfig config) throws DurableDataLogException {
         try {
             return Exceptions.handleInterruptedCall(
-                    () -> bookKeeper.openLedgerNoRecovery(ledgerId, LEDGER_DIGEST_TYPE, config.getBKPassword()));
-        } catch (BKException bkEx) {
-            throw new DurableDataLogException(String.format("Unable to open-read ledger %d.", ledgerId), bkEx);
+                    () -> FutureUtils.result(bookKeeper
+                            .newOpenLedgerOp()
+                            .withLedgerId(ledgerId)
+                            .withDigestType(LEDGER_DIGEST_TYPE)
+                            .withPassword(config.getBKPassword())
+                            .withRecovery(false)
+                            .execute()));
+        } catch (Exception ex) {
+            throw new DurableDataLogException(String.format("Unable to open-read ledger %d.", ledgerId), ex);
         }
     }
 
@@ -105,7 +128,7 @@ final class Ledgers {
      * @throws DurableDataLogException If an exception occurred. The causing exception is wrapped inside it.
      */
     static long readLastAddConfirmed(long ledgerId, BookKeeper bookKeeper, BookKeeperConfig config) throws DurableDataLogException {
-        LedgerHandle h = null;
+        ReadHandle h = null;
         try {
             // Here we open the Ledger WITH recovery, to force BookKeeper to reconcile any appends that may have been
             // interrupted and not properly acked. Otherwise there is no guarantee we can get an accurate value for
@@ -125,11 +148,11 @@ final class Ledgers {
      * @param handle The LedgerHandle to close.
      * @throws DurableDataLogException If an exception occurred. The causing exception is wrapped inside it.
      */
-    static void close(LedgerHandle handle) throws DurableDataLogException {
+    static void close(Handle handle) throws DurableDataLogException {
         try {
             Exceptions.handleInterrupted(handle::close);
-        } catch (BKException bkEx) {
-            throw new DurableDataLogException(String.format("Unable to close ledger %d.", handle.getId()), bkEx);
+        } catch (Exception ex) {
+            throw new DurableDataLogException(String.format("Unable to close ledger %d.", handle.getId()), ex);
         }
     }
 
@@ -170,7 +193,7 @@ final class Ledgers {
         val iterator = ledgers.listIterator(ledgers.size());
         while (iterator.hasPrevious() && (nonEmptyCount < MIN_FENCE_LEDGER_COUNT)) {
             LedgerMetadata ledgerMetadata = iterator.previous();
-            LedgerHandle handle = openFence(ledgerMetadata.getLedgerId(), bookKeeper, config);
+            ReadHandle handle = openFence(ledgerMetadata.getLedgerId(), bookKeeper, config);
             if (handle.getLastAddConfirmed() != NO_ENTRY_ID) {
                 // Non-empty.
                 nonEmptyCount++;
