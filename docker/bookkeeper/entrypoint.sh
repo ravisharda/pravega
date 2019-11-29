@@ -53,7 +53,13 @@ create_dir "${BK_journalDirectories}"
 create_dir "${BK_ledgerDirectories}"
 
 echo "wait for zookeeper"
-until zk-shell --run-once "ls /" ${BK_zkServers}; do sleep 5; done
+# until zk-shell --run-once "ls /" ${BK_zkServers}; do sleep 5; done
+until /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} ls /; do sleep 5; done
+
+if [ "x${BK_CLUSTER_ROOT_PATH}" != "x" ]; then
+        echo "create the zk root dir for bookkeeper at '${BK_CLUSTER_ROOT_PATH}'"
+        /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} create ${BK_CLUSTER_ROOT_PATH}
+fi
 
 # We need to update the metadata endpoint and Bookie ID before attempting to delete the cookie
 sed -i "s|.*metadataServiceUri=.*\$|metadataServiceUri=${BK_metadataServiceUri}|" /opt/bookkeeper/conf/bk_server.conf
