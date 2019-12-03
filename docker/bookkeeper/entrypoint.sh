@@ -160,11 +160,11 @@ create_zk_root
 echo "Creating Zookeeper metadata"
 format_zk_metadata
 
+#echo "Initializing Cluster"
+init_cluster
+
 echo "Formatting bookie if necessary"
 format_bookie
-
-#echo "Initializing Cluster"
-# init_cluster
 
 echo "Starting bookie"
 /opt/bookkeeper/scripts/entrypoint.sh bookie
