@@ -89,7 +89,7 @@ function format_bookie() {
     fi
 }
 
-function format_zk_metdata() {
+function format_zk_metadata() {
     export BOOKIE_CONF=/opt/bookkeeper/conf/bk_server.conf
     export SERVICE_PORT=$BOOKIE_PORT
     echo "Formatting zk metadata. Will ignore any errors if the formatting is already done."
@@ -157,13 +157,14 @@ wait_for_zookeeper
 echo "Creating Zookeeper root"
 create_zk_root
 
+echo "Creating Zookeeper metadata"
+format_zk_metadata
+
 echo "Formatting bookie if necessary"
 format_bookie
 
-format_zk_metdata
-
 #echo "Initializing Cluster"
-init_cluster
+# init_cluster
 
 echo "Starting bookie"
 /opt/bookkeeper/scripts/entrypoint.sh bookie
