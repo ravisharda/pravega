@@ -89,6 +89,15 @@ function format_bookie() {
     fi
 }
 
+function format_zk_metdata() {
+    export BOOKIE_CONF=/opt/bookkeeper/conf/bk_server.conf
+    export SERVICE_PORT=$BOOKIE_PORT
+    echo "Formatting zk metadata. Will ignore any errors if the formatting is already done."
+    /opt/bookkeeper/bin/bookkeeper shell metaformat -nonInteractive || true
+    echo "Done formatting zk metadata "
+
+}
+
 # Init the cluster if required znodes not exist in Zookeeper.
 # Use ephemeral zk node as lock to keep initialize atomic.
 function init_cluster() {
@@ -151,6 +160,8 @@ create_zk_root
 
 echo "Formatting bookie if necessary"
 format_bookie
+
+format_zk_metdata
 
 #echo "Initializing Cluster"
 #init_cluster
