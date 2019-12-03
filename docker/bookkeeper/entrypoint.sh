@@ -8,7 +8,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-set -e
+# set -e
 
 BOOKIE_PORT=${bookiePort:-${BOOKIE_PORT}}
 BOOKIE_PORT=${BOOKIE_PORT:-3181}
@@ -158,7 +158,7 @@ echo "Creating Zookeeper root"
 create_zk_root
 
 echo "Creating Zookeeper metadata"
-format_zk_metadata
+# format_zk_metadata
 
 #echo "Initializing Cluster"
 init_cluster
