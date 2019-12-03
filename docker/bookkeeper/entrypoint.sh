@@ -8,7 +8,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-#set -e
+set -e
 
 BOOKIE_PORT=${bookiePort:-${BOOKIE_PORT}}
 BOOKIE_PORT=${BOOKIE_PORT:-3181}
@@ -85,7 +85,7 @@ function format_bookie() {
       # bookie. We will format any pre-existent data and metadata before starting
       # the bookie to avoid potential conflicts.
       echo "Formatting bookie data and metadata"
-      /opt/bookkeeper/bin/bookkeeper shell bookieformat -nonInteractive -force -deleteCookie
+      /opt/bookkeeper/bin/bookkeeper shell bookieformat -nonInteractive -force -deleteCookie || true
     fi
 }
 
@@ -95,7 +95,6 @@ function format_zk_metdata() {
     echo "Formatting zk metadata. Will ignore any errors if the formatting is already done."
     /opt/bookkeeper/bin/bookkeeper shell metaformat -nonInteractive || true
     echo "Done formatting zk metadata "
-
 }
 
 # Init the cluster if required znodes not exist in Zookeeper.
@@ -164,7 +163,7 @@ format_bookie
 format_zk_metdata
 
 #echo "Initializing Cluster"
-#init_cluster
+init_cluster
 
 echo "Starting bookie"
 /opt/bookkeeper/scripts/entrypoint.sh bookie
