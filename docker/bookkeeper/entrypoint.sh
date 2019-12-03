@@ -50,14 +50,14 @@ create_bookie_dirs() {
   done
 }
 
-function wait_for_zookeeper() {
+wait_for_zookeeper() {
     echo "Waiting for zookeeper"
     until /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} ls /; do sleep 5; done
     echo "Done waiting for Zookeeper"
 }
 
 
-function create_zk_root() {
+create_zk_root() {
     if [ "x${BK_CLUSTER_ROOT_PATH}" != "x" ]; then
         echo "Creating the zk root dir '${BK_CLUSTER_ROOT_PATH}' at '${BK_zkServers}'"
         /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} create ${BK_CLUSTER_ROOT_PATH}
@@ -65,7 +65,7 @@ function create_zk_root() {
     fi
 }
 
-function format_bookie() {
+format_bookie() {
 
     # We need to update the metadata endpoint and Bookie ID before attempting to delete the cookie
     #sed -i "s|.*metadataServiceUri=.*\$|metadataServiceUri=${BK_metadataServiceUri}|" /opt/bookkeeper/conf/bk_server.conf
@@ -89,7 +89,7 @@ function format_bookie() {
     fi
 }
 
-function format_zk_metadata() {
+format_zk_metadata() {
     export BOOKIE_CONF=/opt/bookkeeper/conf/bk_server.conf
     export SERVICE_PORT=$BOOKIE_PORT
     echo "Formatting zk metadata. Will ignore any errors if the formatting is already done."
@@ -99,7 +99,7 @@ function format_zk_metadata() {
 
 # Init the cluster if required znodes not exist in Zookeeper.
 # Use ephemeral zk node as lock to keep initialize atomic.
-function init_cluster() {
+init_cluster() {
     if [ "x${BK_STREAM_STORAGE_ROOT_PATH}" == "x" ]; then
         echo "BK_STREAM_STORAGE_ROOT_PATH is not set. fail fast."
         exit -1
