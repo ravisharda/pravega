@@ -8,7 +8,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-set -e
+#set -e
 
 BOOKIE_PORT=${bookiePort:-${BOOKIE_PORT}}
 BOOKIE_PORT=${BOOKIE_PORT:-3181}
@@ -59,7 +59,7 @@ function wait_for_zookeeper() {
 
 function create_zk_root() {
     if [ "x${BK_CLUSTER_ROOT_PATH}" != "x" ]; then
-        echo "Creating the zk root dir for bookkeeper at '${BK_CLUSTER_ROOT_PATH}'"
+        echo "Creating the zk root dir '${BK_CLUSTER_ROOT_PATH}' at '${BK_zkServers}'"
         /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} create ${BK_CLUSTER_ROOT_PATH}
         echo "Done creating the zk root dir"
     fi
@@ -152,8 +152,8 @@ create_zk_root
 echo "Formatting bookie if necessary"
 format_bookie
 
-echo "Initializing Cluster"
-init_cluster
+#echo "Initializing Cluster"
+#init_cluster
 
 echo "Starting bookie"
 /opt/bookkeeper/scripts/entrypoint.sh bookie
