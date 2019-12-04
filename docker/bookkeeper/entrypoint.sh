@@ -177,8 +177,8 @@ echo "Creating Zookeeper metadata"
 
 configure_bk
 
-echo "Formatting bookie if necessary"
-format_bookie
+# echo "Formatting bookie if necessary"
+# format_bookie
 
 #echo "Initializing Cluster"
 init_cluster
