@@ -111,7 +111,6 @@ function init_cluster() {
     # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}
     echo "Executing 'zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}'"
     zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}
-
     if [ $? -eq 0 ]; then
         echo "Metadata of cluster already exists, no need to init"
     else
@@ -120,7 +119,6 @@ function init_cluster() {
 
         echo "Executing 'zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH}/bkInitLock '' true false false" ${BK_zkServers}'"
         zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH}/bkInitLock '' true false false" ${BK_zkServers}
-
         if [ $? -eq 0 ]; then
             # bkInitLock created success, this is the successor to do znode init
             echo "Initializing bookkeeper cluster at service uri ${BK_metadataServiceUri}."
