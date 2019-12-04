@@ -175,8 +175,9 @@ configure_bk
 # format_bookie
 
 echo "Initializing Cluster"
-init_cluster
+# init_cluster
 
 echo "Starting bookie"
+/bin/sh
 #/opt/bookkeeper/scripts/entrypoint.sh bookie
-/opt/bookkeeper/bin/bookkeeper bookie
+# /opt/bookkeeper/bin/bookkeeper bookie
