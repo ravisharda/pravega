@@ -146,29 +146,5 @@ function init_cluster() {
     fi
 }
 
-echo "Creating directories for journal and ledgers"
-create_bookie_dirs "${BK_journalDirectories}"
-create_bookie_dirs "${BK_ledgerDirectories}"
-
-echo "Waiting for Zookeeper to come up"
-wait_for_zookeeper
-
-echo "Creating Zookeeper root"
-create_zk_root
-
-echo "Creating Zookeeper metadata"
-# format_zk_metadata
-
-configure_bk
-
-# echo "Formatting bookie if necessary"
-# format_bookie
-
-echo "Initializing Cluster"
-init_cluster
-
-echo "Starting bookie"
-#/bin/sh
-#/opt/bookkeeper/scripts/entrypoint.sh bookie
-/opt/bookkeeper/bin/bookkeeper bookie
-# tail -f /dev/null
+echo "start bookie"
+/opt/bookkeeper/scripts/entrypoint.sh bookie
