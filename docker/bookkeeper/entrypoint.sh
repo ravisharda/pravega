@@ -103,31 +103,21 @@ format_zk_metadata() {
 # Init the cluster if required znodes not exist in Zookeeper.
 # Use ephemeral zk node as lock to keep initialize atomic.
 function init_cluster() {
-    if [ "x${BK_STREAM_STORAGE_ROOT_PATH}" == "x" ]; then
-        echo "BK_STREAM_STORAGE_ROOT_PATH is not set. fail fast."
-        exit -1
-    fi
-
-    # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}
-    echo "Executing 'zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}'"
-    zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}
+    zk-shell --run-once "ls ${BK_zkLedgersRootPath}/available/readonly" ${BK_zkServers}
     if [ $? -eq 0 ]; then
-        echo "Metadata of cluster already exists, no need to init"
+        echo "Metadata of cluster already exists, no need format"
     else
         # create ephemeral zk node bkInitLock, initiator who this node, then do init; other initiators will wait.
-        # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} create -e ${BK_CLUSTER_ROOT_PATH}/bkInitLock
-        echo "Executing 'zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH}/bkInitLock '' true false false" ${BK_zkServers}'"
         zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH}/bkInitLock '' true false false" ${BK_zkServers}
-
         if [ $? -eq 0 ]; then
-            echo "Initializing bookkeeper cluster at service uri ${BK_metadataServiceUri}."
-
+            # bkInitLock created success, this is the successor to do znode init
+            echo "Bookkeeper znodes not exist in Zookeeper, do the init to create them."
             /opt/bookkeeper/bin/bookkeeper shell initnewcluster
             if [ $? -eq 0 ]; then
-                echo "Successfully initialized bookkeeper cluster at service uri ${BK_metadataServiceUri}."
+                echo "Bookkeeper znodes init success."
             else
-                echo "Failed to initialize bookkeeper cluster at service uri ${BK_metadataServiceUri}. please check the reason."
-                # exit
+                echo "Bookkeeper znodes init failed. please check the reason."
+                exit
             fi
         else
             echo "Other docker instance is doing initialize at the same time, will wait in this instance."
@@ -135,10 +125,7 @@ function init_cluster() {
             while [ ${tenSeconds} -lt 10 ]
             do
                 sleep 10
-                # echo "run '/opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}'"
-                # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}
-                echo "zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}"
-                zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}
+                zk-shell --run-once "ls ${BK_zkLedgersRootPath}/available/readonly" ${BK_zkServers}
                 if [ $? -eq 0 ]; then
                     echo "Waited $tenSeconds * 10 seconds, bookkeeper inited"
                     break
