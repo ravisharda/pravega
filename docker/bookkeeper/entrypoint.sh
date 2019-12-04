@@ -178,6 +178,7 @@ echo "Initializing Cluster"
 # init_cluster
 
 echo "Starting bookie"
-/bin/sh
+#/bin/sh
 #/opt/bookkeeper/scripts/entrypoint.sh bookie
 # /opt/bookkeeper/bin/bookkeeper bookie
+tail -f /dev/null
