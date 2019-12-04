@@ -111,12 +111,11 @@ function init_cluster() {
     # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}
     echo "Executing 'zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}'"
     zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}
-    if [ $? -eq 0 ]; then
-        echo "Metadata of cluster already exists, no need to init"
-    else
+    #if [ $? -eq 0 ]; then
+     #   echo "Metadata of cluster already exists, no need to init"
+    # else
         # create ephemeral zk node bkInitLock, initiator who this node, then do init; other initiators will wait.
         # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} create -e ${BK_CLUSTER_ROOT_PATH}/bkInitLock
-
         echo "Executing 'zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH}/bkInitLock '' true false false" ${BK_zkServers}'"
         zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH}/bkInitLock '' true false false" ${BK_zkServers}
         if [ $? -eq 0 ]; then
@@ -154,7 +153,7 @@ function init_cluster() {
                 exit
             fi
         fi
-    fi
+    # fi
 }
 
 echo "Creating directories for journal and ledgers"
@@ -175,7 +174,7 @@ configure_bk
 # echo "Formatting bookie if necessary"
 # format_bookie
 
-#echo "Initializing Cluster"
+echo "Initializing Cluster"
 init_cluster
 
 echo "Starting bookie"
