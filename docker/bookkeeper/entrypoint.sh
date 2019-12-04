@@ -2,7 +2,7 @@
 #
 # Copyright (c) Dell Inc., or its subsidiaries. All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.0 (the "LicensBK_STREAM_STORAGE_ROOT_PATHe");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -66,14 +66,15 @@ create_zk_root() {
     fi
 }
 
-format_bookie() {
-
+configure_bk() {
     # We need to update the metadata endpoint and Bookie ID before attempting to delete the cookie
-    #sed -i "s|.*metadataServiceUri=.*\$|metadataServiceUri=${BK_metadataServiceUri}|" /opt/bookkeeper/conf/bk_server.conf
-    #if [ ! -z "$BK_useHostNameAsBookieID" ]; then
-     # sed -i "s|.*useHostNameAsBookieID=.*\$|useHostNameAsBookieID=${BK_useHostNameAsBookieID}|" ${BK_HOME}/conf/bk_server.conf
-    # fi
+    sed -i "s|.*metadataServiceUri=.*\$|metadataServiceUri=${BK_metadataServiceUri}|" /opt/bookkeeper/conf/bk_server.conf
+    if [ ! -z "$BK_useHostNameAsBookieID" ]; then
+      sed -i "s|.*useHostNameAsBookieID=.*\$|useHostNameAsBookieID=${BK_useHostNameAsBookieID}|" ${BK_HOME}/conf/bk_server.conf
+    fi
+}
 
+format_bookie() {
     if [ `find $BK_journalDirectory $BK_ledgerDirectories $BK_indexDirectories -type f 2> /dev/null | wc -l` -gt 0 ]; then
       # The container already contains data in BK directories. This is probably because
       # the container has been restarted; or, if running on Kubernetes, it has probably been
@@ -100,27 +101,31 @@ format_zk_metadata() {
 
 # Init the cluster if required znodes not exist in Zookeeper.
 # Use ephemeral zk node as lock to keep initialize atomic.
-init_cluster() {
+function init_cluster() {
     if [ "x${BK_STREAM_STORAGE_ROOT_PATH}" == "x" ]; then
         echo "BK_STREAM_STORAGE_ROOT_PATH is not set. fail fast."
         exit -1
     fi
 
     # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}
-    zk-shell --run-once "ls ${BK_zkLedgersRootPath}/available/readonly" ${BK_zkServers}
+    echo "Executing 'zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}'"
+    zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}
+    echo "Done executing 'zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}'"
 
     if [ $? -eq 0 ]; then
         echo "Metadata of cluster already exists, no need to init"
     else
         # create ephemeral zk node bkInitLock, initiator who this node, then do init; other initiators will wait.
         # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} create -e ${BK_CLUSTER_ROOT_PATH}/bkInitLock
+
+        echo "Executing 'zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH}/bkInitLock '' true false false" ${BK_zkServers}'"
         zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH}/bkInitLock '' true false false" ${BK_zkServers}
+        echo "Done executing 'zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH}/bkInitLock '' true false false" ${BK_zkServers}'"
 
         if [ $? -eq 0 ]; then
             # bkInitLock created success, this is the successor to do znode init
             echo "Initializing bookkeeper cluster at service uri ${BK_metadataServiceUri}."
             /opt/bookkeeper/bin/bkctl --service-uri ${BK_metadataServiceUri} cluster init
-
             if [ $? -eq 0 ]; then
                 echo "Successfully initialized bookkeeper cluster at service uri ${BK_metadataServiceUri}."
             else
@@ -133,9 +138,10 @@ init_cluster() {
             while [ ${tenSeconds} -lt 10 ]
             do
                 sleep 10
-                echo "run '/opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}'"
+                # echo "run '/opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}'"
                 # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}
-                zk-shell --run-once "ls ${BK_zkLedgersRootPath}/available/readonly" ${BK_zkServers}
+                echo "zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}"
+                zk-shell --run-once "ls ${BK_STREAM_STORAGE_ROOT_PATH}" ${BK_zkServers}
 
                 if [ $? -eq 0 ]; then
                     echo "Waited $tenSeconds * 10 seconds, bookkeeper inited"
@@ -167,6 +173,8 @@ create_zk_root
 
 echo "Creating Zookeeper metadata"
 # format_zk_metadata
+
+configure_bk
 
 #echo "Initializing Cluster"
 init_cluster
