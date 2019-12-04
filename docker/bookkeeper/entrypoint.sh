@@ -74,5 +74,11 @@ else
   /opt/bookkeeper/bin/bookkeeper shell bookieformat -nonInteractive -force -deleteCookie
 fi
 
+export BOOKIE_CONF=/opt/bookkeeper/conf/bk_server.conf
+export SERVICE_PORT=$BOOKIE_PORT
+echo "Formatting zk metadata. Will ignore any errors if the formatting is already done."
+/opt/bookkeeper/bin/bookkeeper shell metaformat -nonInteractive || true
+echo "Done formatting zk metadata "
+
 echo "start bookie"
 /opt/bookkeeper/scripts/entrypoint.sh bookie
