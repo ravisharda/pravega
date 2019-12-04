@@ -20,6 +20,8 @@ BK_CLUSTER_NAME=${BK_CLUSTER_NAME:-"bookkeeper"}
 BK_LEDGERS_PATH="/${PRAVEGA_PATH}/${PRAVEGA_CLUSTER_NAME}/${BK_CLUSTER_NAME}/ledgers"
 BK_DIR="/bk"
 
+BK_zkLedgersRootPath=${BK_LEDGERS_PATH}
+export BK_zkLedgersRootPath=${BK_LEDGERS_PATH}
 export BOOKIE_PORT=${BOOKIE_PORT}
 export BK_zkServers=${BK_zkServers}
 export BK_metadataServiceUri=zk://${ZK_URL}${BK_LEDGERS_PATH}
