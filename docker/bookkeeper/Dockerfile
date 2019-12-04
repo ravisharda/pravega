@@ -49,6 +49,8 @@ RUN chmod +x -R /opt/bookkeeper/scripts/
 
 ENTRYPOINT [ "/bin/bash", "/opt/bookkeeper/scripts/pravega_entrypoint.sh" ]
 
-CMD ["bookie"]
+# CMD ["bookie"]
+# CMD tail -f /dev/null
+CMD ls && ... && /bin/bash
 
 HEALTHCHECK --interval=10s --timeout=60s CMD /bin/bash /opt/bookkeeper/scripts/healthcheck.sh
