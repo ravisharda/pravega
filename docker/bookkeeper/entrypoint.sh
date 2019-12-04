@@ -52,7 +52,7 @@ create_bookie_dirs() {
 
 wait_for_zookeeper() {
     echo "Waiting for zookeeper"
-    until /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} ls /; do sleep 5; done
+    until zk-shell --run-once "ls /" ${BK_zkServers}; do sleep 5; done
     echo "Done waiting for Zookeeper"
 }
 
@@ -60,7 +60,8 @@ wait_for_zookeeper() {
 create_zk_root() {
     if [ "x${BK_CLUSTER_ROOT_PATH}" != "x" ]; then
         echo "Creating the zk root dir '${BK_CLUSTER_ROOT_PATH}' at '${BK_zkServers}'"
-        /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} create ${BK_CLUSTER_ROOT_PATH}
+        # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} create ${BK_CLUSTER_ROOT_PATH}
+        zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH} '' false false true" ${BK_zkServers}
         echo "Done creating the zk root dir"
     fi
 }
@@ -105,7 +106,9 @@ init_cluster() {
         exit -1
     fi
 
-    /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}
+    # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}
+    zk-shell --run-once "ls ${BK_zkLedgersRootPath}/available/readonly" ${BK_zkServers}
+
     if [ $? -eq 0 ]; then
         echo "Metadata of cluster already exists, no need to init"
     else
@@ -161,7 +164,7 @@ echo "Creating Zookeeper metadata"
 # format_zk_metadata
 
 #echo "Initializing Cluster"
-init_cluster
+# init_cluster
 
 echo "Formatting bookie if necessary"
 format_bookie
