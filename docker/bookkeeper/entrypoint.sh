@@ -161,7 +161,7 @@ echo "Creating Zookeeper root"
 create_zk_root
 
 echo "Creating Zookeeper metadata"
-# format_zk_metadata
+format_zk_metadata
 
 #echo "Initializing Cluster"
 # init_cluster
