@@ -8,7 +8,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-# set -e
+set -e
 
 BOOKIE_PORT=${bookiePort:-${BOOKIE_PORT}}
 BOOKIE_PORT=${BOOKIE_PORT:-3181}
@@ -176,11 +176,11 @@ echo "Creating Zookeeper metadata"
 
 configure_bk
 
+echo "Formatting bookie if necessary"
+format_bookie
+
 #echo "Initializing Cluster"
 init_cluster
-
-echo "Formatting bookie if necessary"
-# format_bookie
 
 echo "Starting bookie"
 /opt/bookkeeper/scripts/entrypoint.sh bookie
