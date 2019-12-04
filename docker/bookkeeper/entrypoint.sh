@@ -119,15 +119,14 @@ function init_cluster() {
         echo "Executing 'zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH}/bkInitLock '' true false false" ${BK_zkServers}'"
         zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH}/bkInitLock '' true false false" ${BK_zkServers}
         if [ $? -eq 0 ]; then
-            # bkInitLock created success, this is the successor to do znode init
             echo "Initializing bookkeeper cluster at service uri ${BK_metadataServiceUri}."
-            #/opt/bookkeeper/bin/bkctl --service-uri ${BK_metadataServiceUri} cluster init
+
             /opt/bookkeeper/bin/bookkeeper shell initnewcluster
             if [ $? -eq 0 ]; then
                 echo "Successfully initialized bookkeeper cluster at service uri ${BK_metadataServiceUri}."
             else
                 echo "Failed to initialize bookkeeper cluster at service uri ${BK_metadataServiceUri}. please check the reason."
-                exit
+                # exit
             fi
         else
             echo "Other docker instance is doing initialize at the same time, will wait in this instance."
