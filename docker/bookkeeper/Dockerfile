@@ -16,6 +16,9 @@ ARG DISTRO_NAME=bookkeeper-all-${BK_VERSION}-bin
 ARG GPG_KEY=A615D22C
 ARG GPG_KEY_2=AC055FD2
 
+ENV BOOKIE_PORT=3181
+EXPOSE $BOOKIE_PORT
+
 RUN set -x \
     && yum install -y iproute wget \
     && cd /opt \
