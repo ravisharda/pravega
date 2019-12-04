@@ -8,7 +8,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-set -e
+# set -e
 
 BOOKIE_PORT=${bookiePort:-${BOOKIE_PORT}}
 BOOKIE_PORT=${BOOKIE_PORT:-3181}
@@ -178,4 +178,5 @@ echo "Initializing Cluster"
 init_cluster
 
 echo "Starting bookie"
-/opt/bookkeeper/scripts/entrypoint.sh bookie
+#/opt/bookkeeper/scripts/entrypoint.sh bookie
+/opt/bookkeeper/bin/bookkeeper bookie
