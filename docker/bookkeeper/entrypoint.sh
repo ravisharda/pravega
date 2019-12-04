@@ -62,6 +62,7 @@ create_zk_root() {
         echo "Creating the zk root dir '${BK_CLUSTER_ROOT_PATH}' at '${BK_zkServers}'"
         # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} create ${BK_CLUSTER_ROOT_PATH}
         zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH} '' false false true" ${BK_zkServers}
+        zk-shell --run-once "create ${BK_STREAM_STORAGE_ROOT_PATH} '' false false true" ${BK_zkServers}
         echo "Done creating the zk root dir"
     fi
 }
