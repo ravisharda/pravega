@@ -113,11 +113,14 @@ init_cluster() {
         echo "Metadata of cluster already exists, no need to init"
     else
         # create ephemeral zk node bkInitLock, initiator who this node, then do init; other initiators will wait.
-        /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} create -e ${BK_CLUSTER_ROOT_PATH}/bkInitLock
+        # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} create -e ${BK_CLUSTER_ROOT_PATH}/bkInitLock
+        zk-shell --run-once "create ${BK_CLUSTER_ROOT_PATH}/bkInitLock '' true false false" ${BK_zkServers}
+
         if [ $? -eq 0 ]; then
             # bkInitLock created success, this is the successor to do znode init
             echo "Initializing bookkeeper cluster at service uri ${BK_metadataServiceUri}."
             /opt/bookkeeper/bin/bkctl --service-uri ${BK_metadataServiceUri} cluster init
+
             if [ $? -eq 0 ]; then
                 echo "Successfully initialized bookkeeper cluster at service uri ${BK_metadataServiceUri}."
             else
@@ -131,7 +134,9 @@ init_cluster() {
             do
                 sleep 10
                 echo "run '/opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}'"
-                /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}
+                # /opt/bookkeeper/bin/bookkeeper org.apache.zookeeper.ZooKeeperMain -server ${BK_zkServers} stat ${BK_STREAM_STORAGE_ROOT_PATH}
+                zk-shell --run-once "ls ${BK_zkLedgersRootPath}/available/readonly" ${BK_zkServers}
+
                 if [ $? -eq 0 ]; then
                     echo "Waited $tenSeconds * 10 seconds, bookkeeper inited"
                     break
@@ -161,13 +166,13 @@ echo "Creating Zookeeper root"
 create_zk_root
 
 echo "Creating Zookeeper metadata"
-format_zk_metadata
+# format_zk_metadata
 
 #echo "Initializing Cluster"
 init_cluster
 
 echo "Formatting bookie if necessary"
-format_bookie
+# format_bookie
 
 echo "Starting bookie"
 /opt/bookkeeper/scripts/entrypoint.sh bookie
