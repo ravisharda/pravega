@@ -195,6 +195,7 @@ public class CommandEncoder extends FlushingMessageToByteEncoder<Object> {
         log.trace("Encoding message to send over the wire {}", msg);
         if (msg instanceof Append) {
             Append append = (Append) msg;
+            log.warn("append message in CommandEncoder: {}", append);
             Session session = setupSegments.get(new SimpleImmutableEntry<>(append.segment, append.getWriterId()));
             validateAppend(append, session);
             final ByteBuf data = append.getData().slice();
@@ -328,13 +329,13 @@ public class CommandEncoder extends FlushingMessageToByteEncoder<Object> {
         writerIdPerformingAppends = append.writerId;
         if (ctx != null && blockSize > msgSize) {
             currentBlockSize = blockSize;
-            writeMessage(new AppendBlock(writerIdPerformingAppends), currentBlockSize + TYPE_PLUS_LENGTH_SIZE, out);
+            writeMessage(new AppendBlock(writerIdPerformingAppends, append.getDelegationToken()), currentBlockSize + TYPE_PLUS_LENGTH_SIZE, out);
             ctx.executor().schedule(new BlockTimeouter(ctx.channel(), tokenCounter.incrementAndGet()),
                     blockSizeSupplier.getBatchTimeout(),
                     TimeUnit.MILLISECONDS);
         } else {
             currentBlockSize = msgSize;
-            writeMessage(new AppendBlock(writerIdPerformingAppends), currentBlockSize, out);
+            writeMessage(new AppendBlock(writerIdPerformingAppends, append.getDelegationToken()), currentBlockSize, out);
         }
         bytesLeftInBlock = currentBlockSize;
     }

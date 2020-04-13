@@ -495,7 +495,7 @@ public final class WireCommands {
         final long requestId;
         final UUID writerId;
         final String segment;
-        @ToString.Exclude
+        //@ToString.Exclude
         final String delegationToken;
 
         @Override
@@ -526,21 +526,32 @@ public final class WireCommands {
         final WireCommandType type = WireCommandType.APPEND_BLOCK;
         final UUID writerId;
         final ByteBuf data;
+        //@ToString.Exclude
+        final String delegationToken;
 
         AppendBlock(UUID writerId) {
-            this.writerId = writerId;
-            this.data = Unpooled.EMPTY_BUFFER; // Populated on read path
+            this(writerId, "");
+        }
+
+        AppendBlock(UUID writerId, String delegationToken) {
+            this(writerId, Unpooled.EMPTY_BUFFER, delegationToken);
         }
 
         AppendBlock(UUID writerId, ByteBuf data) {
+            this(writerId, data, "");
+        }
+
+        AppendBlock(UUID writerId, ByteBuf data, String delegationToken) {
             this.writerId = writerId;
             this.data = data;
+            this.delegationToken = delegationToken;
         }
 
         @Override
         public void writeFields(DataOutput out) throws IOException {
             out.writeLong(writerId.getMostSignificantBits());
             out.writeLong(writerId.getLeastSignificantBits());
+            out.writeUTF(delegationToken == null ? "" : delegationToken);
             // Data not written, as it should be null.
         }
 
@@ -548,7 +559,8 @@ public final class WireCommands {
             UUID writerId = new UUID(in.readLong(), in.readLong());
             byte[] data = new byte[length - Long.BYTES * 2];
             in.readFully(data);
-            return new AppendBlock(writerId, wrappedBuffer(data));
+            String delegationToken = in.readUTF();
+            return new AppendBlock(writerId, wrappedBuffer(data), delegationToken);
         }
     }
 

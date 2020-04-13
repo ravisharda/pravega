@@ -97,7 +97,7 @@ public class AppendDecoder extends MessageToMessageDecoder<WireCommand> {
             break;
         case APPEND_BLOCK:
             currentBlock = (WireCommands.AppendBlock) command;
-            getSegment(currentBlock.getWriterId());
+            AppendDecoder.Segment sg = getSegment(currentBlock.getWriterId());
             result = null;
             break;
         case APPEND_BLOCK_END:
@@ -137,7 +137,8 @@ public class AppendDecoder extends MessageToMessageDecoder<WireCommand> {
             }
             segment.lastEventNumber = blockEnd.getLastEventNumber();
             currentBlock = null;
-            result = new Append(segment.name, writerId, segment.lastEventNumber, blockEnd.numEvents, appendDataBuf, null, blockEnd.getRequestId());
+            result = new Append(segment.name, writerId, segment.lastEventNumber, blockEnd.numEvents, appendDataBuf,
+                    null, blockEnd.getRequestId());
             break;
             //$CASES-OMITTED$
         default:

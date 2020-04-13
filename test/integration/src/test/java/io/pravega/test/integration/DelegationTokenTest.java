@@ -185,6 +185,66 @@ public class DelegationTokenTest {
         }
     }
 
+    // Temporary
+    @Test
+    public void testWritesContinueDespiteTokenExpiry() throws ExecutionException, InterruptedException {
+
+        ClusterWrapper pravegaCluster = new ClusterWrapper(true, 2);
+        try {
+            pravegaCluster.initialize();
+
+            String scope = "testscope";
+            String streamName = "teststream";
+            int numSegments = 1;
+            String message = "test message";
+
+            ClientConfig clientConfig = ClientConfig.builder()
+                    .controllerURI(URI.create(pravegaCluster.controllerUri()))
+                    .credentials(new DefaultCredentials("1111_aaaa", "admin"))
+                    .build();
+            log.debug("Done creating client config.");
+
+            @Cleanup
+            StreamManager streamManager = StreamManager.create(clientConfig);
+            assertNotNull(streamManager);
+            log.debug("Done creating stream manager.");
+
+            boolean isScopeCreated = streamManager.createScope(scope);
+            assertTrue("Failed to create scope", isScopeCreated);
+            log.debug("Done creating stream manager.");
+
+            boolean isStreamCreated = streamManager.createStream(scope, streamName, StreamConfiguration.builder()
+                    .scalingPolicy(ScalingPolicy.fixed(numSegments))
+                    .build());
+            Assert.assertTrue("Failed to create the stream ", isStreamCreated);
+
+            @Cleanup
+            EventStreamClientFactory clientFactory = EventStreamClientFactory.withScope(scope, clientConfig);
+
+            //@Cleanup
+            EventStreamWriter<String> writer = clientFactory.createEventWriter(streamName,
+                    new JavaSerializer<String>(),
+                    EventWriterConfig.builder().build());
+            log.error("Done creating the writer");
+
+            // Note: A TokenException is thrown here if token verification fails on the server.
+            try {
+                for (int i=0; i< 3; i++) {
+                    String evtMsg = String.format("message: %s", i);
+                    writer.writeEvent("message ").get();
+                    log.error("Done writing event with message [{}]", evtMsg);
+                    Thread.sleep(2000);
+                }
+            } catch(Exception e) {
+                log.error("**************", e);
+                throw e;
+            }
+        } finally {
+            pravegaCluster.close();
+        }
+
+    }
+
     /**
      * This test verifies that a batch client continues to read events as a result of automatic delegation token
      * renewal, after the initial delegation token it uses expires.

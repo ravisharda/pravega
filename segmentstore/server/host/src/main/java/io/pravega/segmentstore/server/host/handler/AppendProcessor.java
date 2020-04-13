@@ -133,6 +133,10 @@ public class AppendProcessor extends DelegatingRequestProcessor {
      */
     @Override
     public void setupAppend(SetupAppend setupAppend) {
+        if (!setupAppend.getSegment().startsWith("_")) {
+            log.info("Entered setupAppend: {}", setupAppend);
+        }
+
         String newSegment = setupAppend.getSegment();
         UUID writer = setupAppend.getWriterId();
         log.info("Setting up appends for writer: {} on segment: {}", writer, newSegment);
@@ -172,6 +176,10 @@ public class AppendProcessor extends DelegatingRequestProcessor {
      */
     @Override
     public void append(Append append) {
+        if (!append.getSegment().startsWith("_")) {
+            log.info("Entered append: {}", append);
+        }
+
         long traceId = LoggerHelpers.traceEnter(log, "append", append);
         UUID id = append.getWriterId();
         WriterState state = this.writerStates.get(Pair.of(append.getSegment(), id));

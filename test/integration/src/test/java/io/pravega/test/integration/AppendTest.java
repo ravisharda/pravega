@@ -164,7 +164,7 @@ public class AppendTest {
         assertEquals(Long.MIN_VALUE, ack.getPreviousEventNumber());
     }
 
-    @Test(timeout = 10000)
+    @Test//(timeout = 10000)
     public void testMultipleAppends() throws Exception {
         String segment = "123";
         ByteBuf data = Unpooled.wrappedBuffer("Hello world\n".getBytes());

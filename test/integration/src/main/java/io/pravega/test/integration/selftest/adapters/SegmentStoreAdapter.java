@@ -127,7 +127,7 @@ class SegmentStoreAdapter extends StoreAdapter {
                     .connectString("localhost:" + this.config.getZkPort())
                     .namespace("pravega")
                     .retryPolicy(new ExponentialBackoffRetry(1000, 5))
-                    .sessionTimeoutMs(5000)
+                    .sessionTimeoutMs(Integer.MAX_VALUE)
                     .connectionTimeoutMs(5000)
                     .build();
             this.zkClient.start();

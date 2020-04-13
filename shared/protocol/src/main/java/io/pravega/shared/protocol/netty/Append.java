@@ -23,6 +23,7 @@ public class Append implements Request, Comparable<Append> {
     final ByteBuf data;
     final Long expectedLength;
     final long flowId;
+    final String delegationToken;
 
     public Append(String segment, UUID writerId, long eventNumber, Event event, long flowId) {
         this(segment, writerId, eventNumber, 1, event.getAsByteBuf(), null, flowId);
@@ -33,6 +34,10 @@ public class Append implements Request, Comparable<Append> {
     }
     
     public Append(String segment, UUID writerId, long eventNumber, int eventCount, ByteBuf data, Long expectedLength, long flowId) {
+        this(segment, writerId, eventNumber, eventCount, data, expectedLength, flowId, "");
+    }
+
+    public Append(String segment, UUID writerId, long eventNumber, int eventCount, ByteBuf data, Long expectedLength, long flowId, String delegationToken) {
         this.segment = segment;
         this.writerId = writerId;
         this.eventNumber = eventNumber;
@@ -40,6 +45,7 @@ public class Append implements Request, Comparable<Append> {
         this.data = data;
         this.expectedLength = expectedLength;
         this.flowId = flowId;
+        this.delegationToken = delegationToken;
     }
     
     public int getDataLength() {
