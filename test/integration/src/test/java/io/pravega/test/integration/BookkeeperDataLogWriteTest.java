@@ -9,12 +9,16 @@
  */
 package io.pravega.test.integration;
 
+import io.pravega.common.util.CompositeByteArraySegment;
+import io.pravega.segmentstore.storage.DurableDataLog;
 import io.pravega.segmentstore.storage.DurableDataLogFactory;
+import io.pravega.segmentstore.storage.LogAddress;
 import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperConfig;
 import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperLogFactory;
 import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperServiceRunner;
 import io.pravega.test.common.TestUtils;
 
+import lombok.Cleanup;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -27,8 +31,11 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -36,8 +43,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 public class BookkeeperDataLogWriteTest {
-
-    protected static final int WRITE_MAX_LENGTH = 200;
+    private static final int WRITE_MAX_LENGTH = 200;
     private static final int CONTAINER_ID = 9999;
     private static final int WRITE_COUNT = 500;
     private static final int BOOKIE_COUNT = 1;
@@ -45,15 +51,18 @@ public class BookkeeperDataLogWriteTest {
     private static final int MAX_WRITE_ATTEMPTS = 3;
     private static final int MAX_LEDGER_SIZE = WRITE_MAX_LENGTH * Math.max(10, WRITE_COUNT / 20);
     private static final int ZOOKEEPER_PORT = TestUtils.getAvailableListenPort();
+    private static final Duration TIMEOUT = Duration.ofMillis(60 * 1000);
+    private static final int WRITE_MIN_LENGTH = 20;
 
     @SuppressWarnings("checkstyle:StaticVariableName")
     private static BookKeeperServiceRunner BOOKIES_RUNNER;
 
-    private ScheduledExecutorService executorService = null;
-
+    private final Random random = new Random(0);
     private final AtomicReference<BookKeeperConfig> bkConfig = new AtomicReference<>();
     private final AtomicReference<CuratorFramework> zkClient = new AtomicReference<>();
     private final AtomicReference<DurableDataLogFactory> factory = new AtomicReference<>();
+
+    private ScheduledExecutorService executorService = null;
 
     @SneakyThrows
     @BeforeClass
@@ -147,12 +156,24 @@ public class BookkeeperDataLogWriteTest {
 
     @SneakyThrows
     @Test
-    public void test() {
-        log.info("Running the test");
+    public void appendASingleItem() {
+        @Cleanup
+        DurableDataLog dataLog = this.factory.get().createDurableDataLog(CONTAINER_ID);
+        dataLog.initialize(TIMEOUT);
 
-        Thread.sleep(60 * 1000);
+        CompletableFuture<LogAddress> addressFuture =
+                dataLog.append(new CompositeByteArraySegment(getWriteData()), TIMEOUT);
+        long sequenceNum = addressFuture.join().getSequence();
+
+        log.debug("Append sequence number: {}", sequenceNum);
     }
 
+    protected byte[] getWriteData() {
+        int length = WRITE_MIN_LENGTH + random.nextInt(WRITE_MAX_LENGTH - WRITE_MIN_LENGTH);
+        byte[] data = new byte[length];
+        this.random.nextBytes(data);
+        return data;
+    }
 
     @SneakyThrows
     @AfterClass
@@ -162,5 +183,4 @@ public class BookkeeperDataLogWriteTest {
             BOOKIES_RUNNER.close();
         }
     }
-
 }
