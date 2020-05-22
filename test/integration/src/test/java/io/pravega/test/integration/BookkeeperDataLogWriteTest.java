@@ -9,13 +9,18 @@
  */
 package io.pravega.test.integration;
 
+import io.pravega.common.concurrent.Futures;
+import io.pravega.common.io.StreamHelpers;
+import io.pravega.common.util.CloseableIterator;
 import io.pravega.common.util.CompositeByteArraySegment;
 import io.pravega.segmentstore.storage.DurableDataLog;
+import io.pravega.segmentstore.storage.DurableDataLogException;
 import io.pravega.segmentstore.storage.DurableDataLogFactory;
 import io.pravega.segmentstore.storage.LogAddress;
 import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperConfig;
 import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperLogFactory;
 import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperServiceRunner;
+import io.pravega.test.common.AssertExtensions;
 import io.pravega.test.common.TestUtils;
 
 import lombok.Cleanup;
@@ -27,19 +32,28 @@ import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.junit.After;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 @Slf4j
 public class BookkeeperDataLogWriteTest {
@@ -156,19 +170,89 @@ public class BookkeeperDataLogWriteTest {
 
     @SneakyThrows
     @Test
-    public void appendASingleItem() {
-        @Cleanup
-        DurableDataLog dataLog = this.factory.get().createDurableDataLog(CONTAINER_ID);
-        dataLog.initialize(TIMEOUT);
+    public void readMultipleItems() {
+        TreeMap<LogAddress, byte[]> writeData;
+        try (DurableDataLog dataLog = this.factory.get().createDurableDataLog(CONTAINER_ID)) {
+            // dataLog.enable();
+            dataLog.initialize(TIMEOUT);
+            writeData = this.populate(dataLog, 10);
+        }
 
-        CompletableFuture<LogAddress> addressFuture =
-                dataLog.append(new CompositeByteArraySegment(getWriteData()), TIMEOUT);
-        long sequenceNum = addressFuture.join().getSequence();
-
-        log.debug("Append sequence number: {}", sequenceNum);
+        try (DurableDataLog dataLog = this.factory.get().createDurableDataLog(CONTAINER_ID)) {
+            // dataLog.enable();
+            dataLog.initialize(TIMEOUT);
+            verifyReads(dataLog, writeData);
+        }
     }
 
-    protected byte[] getWriteData() {
+    private void verifyReads(DurableDataLog log, TreeMap<LogAddress, byte[]> writeData) throws Exception {
+        @Cleanup
+        CloseableIterator<DurableDataLog.ReadItem, DurableDataLogException> reader = log.getReader();
+        Iterator<Map.Entry<LogAddress, byte[]>> expectedIterator = writeData.entrySet().iterator();
+        while (true) {
+            DurableDataLog.ReadItem nextItem = reader.getNext();
+            if (nextItem == null) {
+                Assert.assertFalse("Reader reached the end but there were still items to be read.", expectedIterator.hasNext());
+                break;
+            }
+
+            Assert.assertTrue("Reader has more items but there should not be any more items to be read.", expectedIterator.hasNext());
+
+            // Verify sequence number, as well as payload.
+            val expected = expectedIterator.next();
+            Assert.assertEquals("Unexpected sequence number.", expected.getKey().getSequence(), nextItem.getAddress().getSequence());
+            val actualPayload = StreamHelpers.readAll(nextItem.getPayload(), nextItem.getLength());
+            Assert.assertArrayEquals("Unexpected payload for sequence number " + expected.getKey(), expected.getValue(), actualPayload);
+        }
+    }
+
+
+    @SneakyThrows
+    @Test
+    public void appendASingleItemThenRead() {
+        try (DurableDataLog writeDataLog = this.factory.get().createDurableDataLog(CONTAINER_ID)) {
+            // dataLog.enable();
+            writeDataLog.initialize(TIMEOUT);
+
+            CompletableFuture<LogAddress> addressFuture =
+                    writeDataLog.append(new CompositeByteArraySegment(getWriteData()), TIMEOUT);
+            long sequenceNum = addressFuture.join().getSequence();
+            assertTrue(sequenceNum > 1);
+            log.debug("Append sequence number: {}", sequenceNum);
+        }
+
+        try(DurableDataLog readDataLog = this.factory.get().createDurableDataLog(CONTAINER_ID)) {
+            readDataLog.initialize(TIMEOUT);
+            CloseableIterator<DurableDataLog.ReadItem, DurableDataLogException> reader = readDataLog.getReader();
+            DurableDataLog.ReadItem readItem = null;
+            int readCount = 0;
+            while ((readItem = reader.getNext()) != null) {
+                log.debug("Read an item");
+                readCount++;
+            }
+            assertEquals("Unexpected number of entries/ledgers read.", 1, readCount);
+        }
+    }
+
+    protected TreeMap<LogAddress, byte[]> populate(DurableDataLog log, int writeCount) {
+        TreeMap<LogAddress, byte[]> writtenData = new TreeMap<>(Comparator.comparingLong(LogAddress::getSequence));
+        val data = new ArrayList<byte[]>();
+        val futures = new ArrayList<CompletableFuture<LogAddress>>();
+        for (int i = 0; i < writeCount; i++) {
+            byte[] writeData = getWriteData();
+            futures.add(log.append(new CompositeByteArraySegment(writeData), TIMEOUT));
+            data.add(writeData);
+        }
+
+        val addresses = Futures.allOfWithResults(futures).join();
+        for (int i = 0; i < data.size(); i++) {
+            writtenData.put(addresses.get(i), data.get(i));
+        }
+
+        return writtenData;
+    }
+
+    private byte[] getWriteData() {
         int length = WRITE_MIN_LENGTH + random.nextInt(WRITE_MAX_LENGTH - WRITE_MIN_LENGTH);
         byte[] data = new byte[length];
         this.random.nextBytes(data);
