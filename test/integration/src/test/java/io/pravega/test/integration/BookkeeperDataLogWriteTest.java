@@ -170,6 +170,17 @@ public class BookkeeperDataLogWriteTest {
 
     @SneakyThrows
     @Test
+    public void writeLotsOfItems() {
+        TreeMap<LogAddress, byte[]> writeData;
+        try (DurableDataLog dataLog = this.factory.get().createDurableDataLog(CONTAINER_ID)) {
+            // dataLog.enable();
+            dataLog.initialize(TIMEOUT);
+            writeData = this.populate(dataLog, 20000);
+        }
+    }
+
+    @SneakyThrows
+    @Test
     public void readMultipleItems() {
         TreeMap<LogAddress, byte[]> writeData;
         try (DurableDataLog dataLog = this.factory.get().createDurableDataLog(CONTAINER_ID)) {
