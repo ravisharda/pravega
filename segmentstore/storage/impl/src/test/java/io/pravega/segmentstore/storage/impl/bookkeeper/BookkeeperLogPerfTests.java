@@ -21,7 +21,7 @@ import lombok.Cleanup;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.tuple.Triple;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
@@ -54,10 +54,9 @@ public class BookkeeperLogPerfTests {
     private static final AtomicInteger LOG_ID = new AtomicInteger(9999);
     private static final int THREAD_POOL_SIZE = 3;
     private static final int MAX_WRITE_ATTEMPTS = 3;
-    private static final ConcurrentMap<Pair, Duration> durationByCase = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Triple, Duration> durationByCase = new ConcurrentHashMap<>();
 
     private final Random random = new Random(0);
-    private final AtomicReference<BookKeeperConfig> bkConfig = new AtomicReference<>();
     private final AtomicReference<CuratorFramework> zkClient = new AtomicReference<>();
     private final AtomicReference<DurableDataLogFactory> factory = new AtomicReference<>();
 
@@ -67,6 +66,118 @@ public class BookkeeperLogPerfTests {
     @Before
     public void setup() {
         startBookkeeper(1);
+    }
+
+    @SneakyThrows
+    @After
+    public void tearDown() {
+        log.debug("Shutting down bookkeeper");
+        shutDownBookkeeper();
+    }
+
+    @SneakyThrows
+    @AfterClass
+    public static void tearDownEnv() {
+        printDurations();
+    }
+
+    @SneakyThrows
+    @Test
+    /*@Parameters({
+            "100, 20",
+            "2000, 20"
+    })*/
+    /*@Parameters({
+            "100,   20",
+            "2000,  20",
+            "10000, 20",
+            "30000, 20",
+            "70000, 20",
+            "100,   100",
+            "2000,  100",
+            "10000, 100",
+            "30000, 100",
+            "70000, 100",
+            "100,   2000",
+            "2000,  2000",
+            "10000, 2000",
+            "30000, 2000",
+            "70000, 2000",
+    })*/
+    @Parameters({
+            "200000, 4096",
+            "500000, 4096",
+    })
+    public void writeLotsOfItems(int numEntries, int bytesLength) {
+        List<CompletableFuture<LogAddress>> writeFutures = new ArrayList<>();
+
+        @Cleanup
+        BookKeeperLog bkLogWriter = (BookKeeperLog)this.factory.get().createDurableDataLog(
+                LOG_ID.incrementAndGet());
+        bkLogWriter.initialize(Duration.ofSeconds(60));
+        log.debug("No. of ledgers: {}", bkLogWriter.loadMetadata().getLedgers().size());
+
+        Instant startInstant = Instant.now();
+
+        byte[] writeData = generateDummyWriteData(bytesLength);
+
+        // Write data to Bookkeeper asynchronously
+        for (int i = 0; i < numEntries; i++) {
+            CompletableFuture<LogAddress> appendFuture =
+                    bkLogWriter.append(new CompositeByteArraySegment(writeData), Duration.ofSeconds(60));
+            writeFutures.add(appendFuture);
+        }
+
+        // Wait for all write futures to complete
+        List<LogAddress> logEntries = Futures.allOfWithResults(writeFutures).join();
+        Duration duration = Duration.between(startInstant, Instant.now());
+
+        durationByCase.putIfAbsent(Triple.of(numEntries, bytesLength, System.currentTimeMillis()), duration);
+
+        // Verify test resuts
+        assertEquals(numEntries, logEntries.size());
+    }
+
+
+    private static void printDurations() {
+        durationByCase.forEach((triplet, duration) -> {
+            log.info("Took {} milliseconds to write {} entries of length {} at time{}",
+                    duration.toMillis(), triplet.getLeft(), triplet.getMiddle(), triplet.getRight());
+        });
+    }
+
+    private byte[]  generateDummyWriteData(int length) {
+        byte[] data = new byte[length];
+        this.random.nextBytes(data);
+        return data;
+    }
+
+    private ScheduledExecutorService executorService() {
+        ScheduledThreadPoolExecutor es = new ScheduledThreadPoolExecutor(THREAD_POOL_SIZE);
+        es.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+        es.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        es.setRemoveOnCancelPolicy(true);
+        return es;
+    }
+
+    private void shutDownBookkeeper() throws Exception {
+        this.executorService.shutdownNow();
+        this.executorService.awaitTermination(5, TimeUnit.SECONDS);
+
+        DurableDataLogFactory dataLogFactory = this.factory.getAndSet(null);
+        if (dataLogFactory != null) {
+            dataLogFactory.close();
+        }
+
+        val zkClient = this.zkClient.getAndSet(null);
+        if (zkClient != null) {
+            zkClient.close();
+        }
+
+        log.debug("tearDownEnv entry");
+        if (bookiesRunner != null) {
+            bookiesRunner.close();
+        }
     }
 
     @SneakyThrows
@@ -104,7 +215,8 @@ public class BookkeeperLogPerfTests {
         this.zkClient.get().start();
 
         // Setup bkConfig to use the port and namespace.
-        this.bkConfig.set(BookKeeperConfig
+
+        BookKeeperConfig bookieConfig = BookKeeperConfig
                 .builder()
                 .with(BookKeeperConfig.ZK_ADDRESS, "localhost:" + zookeeperPort)
                 .with(BookKeeperConfig.MAX_WRITE_ATTEMPTS, MAX_WRITE_ATTEMPTS)
@@ -115,124 +227,15 @@ public class BookkeeperLogPerfTests {
                 .with(BookKeeperConfig.BK_WRITE_QUORUM_SIZE, bookieCount)
                 .with(BookKeeperConfig.BK_ACK_QUORUM_SIZE, bookieCount)
                 .with(BookKeeperConfig.BK_WRITE_TIMEOUT, 1000) // This is the minimum we can set anyway.
-                .build());
+                .build();
 
         this.executorService = executorService();
 
         // Create default factory.
-        DurableDataLogFactory factory = new BookKeeperLogFactory(this.bkConfig.get(), this.zkClient.get(),
+        DurableDataLogFactory factory = new BookKeeperLogFactory(bookieConfig, this.zkClient.get(),
                 this.executorService);
         factory.initialize();
         this.factory.set(factory);
-    }
-
-    private ScheduledExecutorService executorService() {
-        ScheduledThreadPoolExecutor es = new ScheduledThreadPoolExecutor(THREAD_POOL_SIZE);
-        es.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
-        es.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
-        es.setRemoveOnCancelPolicy(true);
-        return es;
-    }
-
-    @SneakyThrows
-    @After
-    public void tearDown() {
-        log.debug("Shutting down bookkeeper");
-        shutDownBookkeeper();
-    }
-
-    private void shutDownBookkeeper() throws Exception {
-        this.executorService.shutdownNow();
-        this.executorService.awaitTermination(5, TimeUnit.SECONDS);
-
-        DurableDataLogFactory dataLogFactory = this.factory.getAndSet(null);
-        if (dataLogFactory != null) {
-            dataLogFactory.close();
-        }
-
-        val zkClient = this.zkClient.getAndSet(null);
-        if (zkClient != null) {
-            zkClient.close();
-        }
-
-        log.debug("tearDownEnv entry");
-        if (bookiesRunner != null) {
-            bookiesRunner.close();
-        }
-    }
-
-    @SneakyThrows
-    @Test
-    /*@Parameters({
-            "100, 20",
-            "2000, 20"
-    })*/
-    @Parameters({
-            "100,   20",
-            "2000,  20",
-            "10000, 20",
-            "30000, 20",
-            "70000, 20",
-            "100,   100",
-            "2000,  100",
-            "10000, 100",
-            "30000, 100",
-            "70000, 100",
-            "100,   2000",
-            "2000,  2000",
-            "10000, 2000",
-            "30000, 2000",
-            "70000, 2000",
-    })
-    public void writeLotsOfItems(int numEntries, int bytesLength) {
-        List<CompletableFuture<LogAddress>> writeFutures = new ArrayList<>();
-
-        @Cleanup
-        BookKeeperLog bkLogWriter = (BookKeeperLog)this.factory.get().createDurableDataLog(
-                LOG_ID.incrementAndGet());
-        bkLogWriter.initialize(Duration.ofSeconds(60));
-        log.debug("No. of ledgers: {}", bkLogWriter.loadMetadata().getLedgers().size());
-
-        Instant startInstant = Instant.now();
-
-        byte[] writeData = generateDummyWriteData(bytesLength);
-
-        // Write data to Bookkeeper asynchronously
-        for (int i = 0; i < numEntries; i++) {
-            CompletableFuture<LogAddress> appendFuture =
-                    bkLogWriter.append(new CompositeByteArraySegment(writeData), Duration.ofSeconds(60));
-            writeFutures.add(appendFuture);
-        }
-
-        // Wait for all write futures to complete
-        List<LogAddress> logEntries = Futures.allOfWithResults(writeFutures).join();
-        Duration duration = Duration.between(startInstant, Instant.now());
-
-        durationByCase.putIfAbsent(Pair.of(numEntries, bytesLength), duration);
-
-        // Verify test resuts
-        assertEquals(numEntries, logEntries.size());
-    }
-
-
-
-    private byte[]  generateDummyWriteData(int length) {
-        byte[] data = new byte[length];
-        this.random.nextBytes(data);
-        return data;
-    }
-
-    @SneakyThrows
-    @AfterClass
-    public static void tearDownEnv() {
-        printDurations();
-    }
-
-    private static void printDurations() {
-        durationByCase.forEach((pair, duration) -> {
-            log.info("Took {} milliseconds to write {} entries of length {}",
-                    duration.toMillis(), pair.getLeft(), pair.getRight());
-        });
     }
 }
 
