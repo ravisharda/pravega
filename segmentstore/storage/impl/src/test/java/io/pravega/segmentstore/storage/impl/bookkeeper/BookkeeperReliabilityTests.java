@@ -7,7 +7,7 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
-package io.pravega.test.integration;
+package io.pravega.segmentstore.storage.impl.bookkeeper;
 
 import io.pravega.common.concurrent.Futures;
 import io.pravega.common.io.StreamHelpers;
@@ -17,16 +17,15 @@ import io.pravega.segmentstore.storage.DurableDataLog;
 import io.pravega.segmentstore.storage.DurableDataLogException;
 import io.pravega.segmentstore.storage.DurableDataLogFactory;
 import io.pravega.segmentstore.storage.LogAddress;
-import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperConfig;
-import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperLogFactory;
-import io.pravega.segmentstore.storage.impl.bookkeeper.BookKeeperServiceRunner;
-import io.pravega.test.common.AssertExtensions;
 import io.pravega.test.common.TestUtils;
 
+import junitparams.JUnitParamsRunner;
+import junitparams.Parameters;
 import lombok.Cleanup;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
@@ -35,9 +34,12 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -46,19 +48,22 @@ import java.util.Map;
 import java.util.Random;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
+@RunWith(JUnitParamsRunner.class)
 @Slf4j
-public class BookkeeperDataLogWriteTest {
+public class BookkeeperReliabilityTests {
     private static final int WRITE_MAX_LENGTH = 200;
-    private static final int CONTAINER_ID = 9999;
+    private static final AtomicInteger LOG_ID = new AtomicInteger(9999);
     private static final int WRITE_COUNT = 500;
     private static final int BOOKIE_COUNT = 1;
     private static final int THREAD_POOL_SIZE = 3;
@@ -75,6 +80,8 @@ public class BookkeeperDataLogWriteTest {
     private final AtomicReference<BookKeeperConfig> bkConfig = new AtomicReference<>();
     private final AtomicReference<CuratorFramework> zkClient = new AtomicReference<>();
     private final AtomicReference<DurableDataLogFactory> factory = new AtomicReference<>();
+
+    private static final ConcurrentMap<Pair, Duration> durationByCase = new ConcurrentHashMap<>();
 
     private ScheduledExecutorService executorService = null;
 
@@ -168,29 +175,68 @@ public class BookkeeperDataLogWriteTest {
         }
     }
 
+    // "10000, 20",
+    // "50000, 20",
+
     @SneakyThrows
     @Test
-    public void writeLotsOfItems() {
-        TreeMap<LogAddress, byte[]> writeData;
-        try (DurableDataLog dataLog = this.factory.get().createDurableDataLog(CONTAINER_ID)) {
-            // dataLog.enable();
-            dataLog.initialize(TIMEOUT);
-            writeData = this.populate(dataLog, 20000);
+    @Parameters({
+            //"100, 20",
+            // "2000, 20",
+            "10000, 20",
+            "30000, 20",
+            "70000, 20",
+            "10000, 100",
+            "30000, 100",
+            "70000, 100",
+            "10000, 2000",
+            "30000, 2000",
+            "70000, 2000",
+    })
+    public void writeLotsOfItems(int numEntries, int bytesLength) {
+        List<CompletableFuture<LogAddress>> writeFutures = new ArrayList<>();
+
+        @Cleanup
+        BookKeeperLog bkLogWriter = (BookKeeperLog)this.factory.get().createDurableDataLog(
+                LOG_ID.incrementAndGet());
+        bkLogWriter.initialize(Duration.ofSeconds(60));
+        log.debug("No. of ledgers: {}", bkLogWriter.loadMetadata().getLedgers().size());
+
+        Instant startInstant = Instant.now();
+
+        byte[] writeData = generateDummyWriteData(bytesLength);
+
+        // Write data to Bookkeeper asynchronously
+        for (int i = 0; i < numEntries; i++) {
+            CompletableFuture<LogAddress> appendFuture =
+                    bkLogWriter.append(new CompositeByteArraySegment(writeData), Duration.ofSeconds(60));
+            writeFutures.add(appendFuture);
         }
+
+        // Wait for all write futures to complete
+        List<LogAddress> logEntries = Futures.allOfWithResults(writeFutures).join();
+        Duration duration = Duration.between(startInstant, Instant.now());
+
+        durationByCase.putIfAbsent(Pair.of(numEntries, bytesLength), duration);
+
+        // Verify test resuts
+        assertEquals(numEntries, logEntries.size());
     }
 
+
+    @Ignore
     @SneakyThrows
     @Test
     public void readMultipleItems() {
         TreeMap<LogAddress, byte[]> writeData;
-        try (DurableDataLog dataLog = this.factory.get().createDurableDataLog(CONTAINER_ID)) {
+        int logId = LOG_ID.incrementAndGet();
+        try (DurableDataLog dataLog = this.factory.get().createDurableDataLog(logId)) {
             // dataLog.enable();
             dataLog.initialize(TIMEOUT);
-            writeData = this.populate(dataLog, 10);
+            writeData = this.appendData(dataLog, 10);
         }
 
-        try (DurableDataLog dataLog = this.factory.get().createDurableDataLog(CONTAINER_ID)) {
-            // dataLog.enable();
+        try (DurableDataLog dataLog = this.factory.get().createDurableDataLog(logId)) {
             dataLog.initialize(TIMEOUT);
             verifyReads(dataLog, writeData);
         }
@@ -218,56 +264,37 @@ public class BookkeeperDataLogWriteTest {
     }
 
 
-    @SneakyThrows
-    @Test
-    public void appendASingleItemThenRead() {
-        try (DurableDataLog writeDataLog = this.factory.get().createDurableDataLog(CONTAINER_ID)) {
-            // dataLog.enable();
-            writeDataLog.initialize(TIMEOUT);
+    private TreeMap<LogAddress, byte[]> appendData(DurableDataLog bookkeeperLog, int writeCount) {
+        TreeMap<LogAddress, byte[]> result = new TreeMap<>(Comparator.comparingLong(LogAddress::getSequence));
 
-            CompletableFuture<LogAddress> addressFuture =
-                    writeDataLog.append(new CompositeByteArraySegment(getWriteData()), TIMEOUT);
-            long sequenceNum = addressFuture.join().getSequence();
-            assertTrue(sequenceNum > 1);
-            log.debug("Append sequence number: {}", sequenceNum);
-        }
-
-        try(DurableDataLog readDataLog = this.factory.get().createDurableDataLog(CONTAINER_ID)) {
-            readDataLog.initialize(TIMEOUT);
-            CloseableIterator<DurableDataLog.ReadItem, DurableDataLogException> reader = readDataLog.getReader();
-            DurableDataLog.ReadItem readItem = null;
-            int readCount = 0;
-            while ((readItem = reader.getNext()) != null) {
-                log.debug("Read an item");
-                readCount++;
-            }
-            assertEquals("Unexpected number of entries/ledgers read.", 1, readCount);
-        }
-    }
-
-    protected TreeMap<LogAddress, byte[]> populate(DurableDataLog log, int writeCount) {
-        TreeMap<LogAddress, byte[]> writtenData = new TreeMap<>(Comparator.comparingLong(LogAddress::getSequence));
-        val data = new ArrayList<byte[]>();
         val futures = new ArrayList<CompletableFuture<LogAddress>>();
+
+        val appendSentData = new ArrayList<byte[]>();
         for (int i = 0; i < writeCount; i++) {
-            byte[] writeData = getWriteData();
-            futures.add(log.append(new CompositeByteArraySegment(writeData), TIMEOUT));
-            data.add(writeData);
+            byte[] writeData = generateDummyWriteData();
+            futures.add(bookkeeperLog.append(new CompositeByteArraySegment(writeData), TIMEOUT));
+            appendSentData.add(writeData);
         }
 
         val addresses = Futures.allOfWithResults(futures).join();
-        for (int i = 0; i < data.size(); i++) {
-            writtenData.put(addresses.get(i), data.get(i));
-        }
+        log.debug("Number of addresses: {}", addresses.size());
 
-        return writtenData;
+        for (int i = 0; i < appendSentData.size(); i++) {
+            result.put(addresses.get(i), appendSentData.get(i));
+            log.debug("Write address: {}", addresses.get(i));
+        }
+        return result;
     }
 
-    private byte[] getWriteData() {
-        int length = WRITE_MIN_LENGTH + random.nextInt(WRITE_MAX_LENGTH - WRITE_MIN_LENGTH);
+    private byte[]  generateDummyWriteData(int length) {
         byte[] data = new byte[length];
         this.random.nextBytes(data);
         return data;
+    }
+
+    private byte[] generateDummyWriteData() {
+        int length = WRITE_MIN_LENGTH + random.nextInt(WRITE_MAX_LENGTH - WRITE_MIN_LENGTH);
+        return this.generateDummyWriteData(length);
     }
 
     @SneakyThrows
@@ -277,5 +304,14 @@ public class BookkeeperDataLogWriteTest {
         if (BOOKIES_RUNNER != null) {
             BOOKIES_RUNNER.close();
         }
+        printDurations();
+    }
+
+    private static void printDurations() {
+        durationByCase.forEach((pair, duration) -> {
+            log.info("Took {} milliseconds to write {} entries of length {}",
+                    duration.toMillis(), pair.getLeft(), pair.getRight());
+        });
     }
 }
+
