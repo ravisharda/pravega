@@ -224,12 +224,22 @@ public class ControllerServiceImpl extends ControllerServiceGrpc.ControllerServi
         RequestTag requestTag = requestTracker.initializeAndTrackRequestTag(requestIdGenerator.get(), "createStream",
                                                                             scope, stream);
         log.info(requestTag.getRequestId(), "createStream called for stream {}/{}.", scope, stream);
-        authenticateExecuteAndProcessResults(() -> this.grpcAuthHelper.checkAuthorizationAndCreateToken(
-                authorizationResource.ofStreamsInScope(scope), AuthHandler.Permissions.READ_UPDATE),
-                                             delegationToken -> controllerService.createStream(scope, stream,
-                                                                                               ModelHelper.encode(request),
-                                                                                               System.currentTimeMillis()),
-                                             responseObserver, requestTag);
+
+        if (stream.contains("stream:_RG")) {
+            authenticateExecuteAndProcessResults(() -> this.grpcAuthHelper.checkAuthorizationAndCreateToken(
+                    authorizationResource.ofStreamsInScope(scope), AuthHandler.Permissions.READ),
+                    delegationToken -> controllerService.createStream(scope, stream,
+                            ModelHelper.encode(request),
+                            System.currentTimeMillis()),
+                    responseObserver, requestTag);
+        } else {
+            authenticateExecuteAndProcessResults(() -> this.grpcAuthHelper.checkAuthorizationAndCreateToken(
+                    authorizationResource.ofStreamsInScope(scope), AuthHandler.Permissions.READ_UPDATE),
+                    delegationToken -> controllerService.createStream(scope, stream,
+                            ModelHelper.encode(request),
+                            System.currentTimeMillis()),
+                    responseObserver, requestTag);
+        }
     }
 
     @Override
@@ -291,7 +301,7 @@ public class ControllerServiceImpl extends ControllerServiceGrpc.ControllerServi
         log.info("getCurrentSegments called for stream {}/{}.", request.getScope(), request.getStream());
         authenticateExecuteAndProcessResults(() -> this.grpcAuthHelper.checkAuthorizationAndCreateToken(
                 authorizationResource.ofStreamInScope(request.getScope(), request.getStream()),
-                AuthHandler.Permissions.READ_UPDATE),
+                AuthHandler.Permissions.READ),
                 delegationToken -> {
                     logIfEmpty(delegationToken, "getCurrentSegments", request.getScope(), request.getStream());
                     return controllerService.getCurrentSegments(request.getScope(), request.getStream())

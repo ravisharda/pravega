@@ -503,7 +503,7 @@ public final class WireCommands {
         final long requestId;
         final UUID writerId;
         final String segment;
-        @ToString.Exclude
+        //@ToString.Exclude
         final String delegationToken;
 
         @Override
@@ -783,7 +783,7 @@ public final class WireCommands {
         final String segment;
         final long offset;
         final int suggestedLength;
-        @ToString.Exclude
+        //@ToString.Exclude
         final String delegationToken;
         final long requestId;
 
