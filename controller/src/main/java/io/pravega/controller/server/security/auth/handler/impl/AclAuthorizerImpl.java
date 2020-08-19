@@ -19,18 +19,18 @@ class AclAuthorizerImpl extends AclAuthorizer {
         AuthHandler.Permissions result = AuthHandler.Permissions.NONE;
 
         String resourceDomain;
-        if (resource.indexOf("::") > 0) {
-            resourceDomain = resource.substring(0, resource.indexOf("::"));
+        int indexOfPartsSeparator = resource.indexOf("::");
+        if (indexOfPartsSeparator > 0) {
+            resourceDomain = resource.substring(0, indexOfPartsSeparator);
         } else {
             resourceDomain = "prn"; // default
         }
 
         for (AccessControlEntry accessControlEntry : accessControlList.getEntries()) {
-            // Replaces any `*` with `.*`, if it's not already preceded by `.`, for regex processing.
-            // So, `pravega:://*` becomes `pravega:://.*` and `pravega:://scope:*` becomes `pravega:://scope:.*`
-            String aclResourcePattern = accessControlEntry.getResourcePattern().replaceAll("(?!=.)\\*", ".*");
-            if (accessControlEntry.resourceStartsWith(resourceDomain)) {
-                if (resource.matches(aclResourcePattern)) {
+            // You could have a null ACE in the ACL if you had a malformed entry such as `prn::/scope:readresource`
+            // having no permissions set.
+            if (accessControlEntry != null && accessControlEntry.resourceStartsWith(resourceDomain)) {
+                if (resource.matches(accessControlEntry.getResourcePattern())) {
                     result = accessControlEntry.getPermissions();
                     break;
                 }
