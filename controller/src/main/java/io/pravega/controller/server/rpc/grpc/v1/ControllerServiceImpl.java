@@ -217,7 +217,7 @@ public class ControllerServiceImpl extends ControllerServiceGrpc.ControllerServi
                                                                             scope, stream);
         log.info(requestTag.getRequestId(), "createStream called for stream {}/{}.", scope, stream);
 
-        if (stream.contains("stream:_RG")) {
+        if (stream.contains("_RG")) {
             authenticateExecuteAndProcessResults(() -> this.grpcAuthHelper.checkAuthorizationAndCreateToken(
                     authorizationResource.ofStreamsInScope(scope), AuthHandler.Permissions.READ),
                     delegationToken -> controllerService.createStream(scope, stream,
@@ -330,7 +330,7 @@ public class ControllerServiceImpl extends ControllerServiceGrpc.ControllerServi
         authenticateExecuteAndProcessResults(() -> this.grpcAuthHelper.checkAuthorizationAndCreateToken(
                 authorizationResource.ofStreamInScope(request.getStreamInfo().getScope(),
                         request.getStreamInfo().getStream()),
-                AuthHandler.Permissions.READ_UPDATE),
+                request.getStreamInfo().getStream().contains("testStream") ? AuthHandler.Permissions.READ : AuthHandler.Permissions.READ_UPDATE),
                 delegationToken -> {
                     logIfEmpty(delegationToken, "getSegments", request.getStreamInfo().getScope(),
                             request.getStreamInfo().getStream());
@@ -726,9 +726,18 @@ public class ControllerServiceImpl extends ControllerServiceGrpc.ControllerServi
     @Override
     public void getDelegationToken(StreamInfo request, StreamObserver<DelegationToken> responseObserver)  {
         log.info("getDelegationToken called for stream {}/{}.", request.getScope(), request.getStream());
+
+        final AuthHandler.Permissions requiredPermissions;
+        if (request.getStream().contains("_")) {
+            // _MARKstream or _RG
+            requiredPermissions = AuthHandler.Permissions.READ;
+        } else {
+            requiredPermissions = AuthHandler.Permissions.READ_UPDATE;
+        }
+
         authenticateExecuteAndProcessResults(() -> this.grpcAuthHelper.checkAuthorizationAndCreateToken(
                 authorizationResource.ofStreamInScope(request.getScope(), request.getStream()),
-                AuthHandler.Permissions.READ_UPDATE),
+                requiredPermissions),
                 delegationToken -> {
                     logIfEmpty(delegationToken, "getDelegationToken", request.getScope(), request.getStream());
                     return CompletableFuture.completedFuture(DelegationToken

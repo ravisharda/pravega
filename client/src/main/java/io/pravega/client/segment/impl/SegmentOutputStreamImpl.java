@@ -601,6 +601,7 @@ class SegmentOutputStreamImpl implements SegmentOutputStream {
                              ClientConnection connection = pair.getKey();
                              String token = pair.getValue();
 
+
                              CompletableFuture<Void> connectionSetupFuture = state.newConnection(connection);
                              SetupAppend cmd = new SetupAppend(requestId, writerId, segmentName, token);
                              try {

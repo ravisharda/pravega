@@ -27,7 +27,10 @@ import io.pravega.controller.server.security.auth.StrongPasswordProcessor;
 import io.pravega.test.integration.demo.ClusterWrapper;
 import io.pravega.test.integration.utils.PasswordAuthHandlerInput;
 import lombok.Cleanup;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.net.URI;
@@ -48,21 +51,23 @@ import static org.junit.Assert.assertTrue;
 @Slf4j
 public class ReadWithReadPermissionsTest {
 
-    @Test
-    public void readUsingUserAccountsWithReadPermission() throws ExecutionException, InterruptedException {
+    String scopeName = "testScope";
+    String streamName = "testStream";
+    String message = "test message";
+
+    ClusterWrapper cluster;
+
+    @SneakyThrows
+    @Before
+    public void setup() {
         Map<String, String> passwordInputFileEntries = new HashMap<>();
         passwordInputFileEntries.put("creator", "prn::*,READ_UPDATE");
         passwordInputFileEntries.put("reader", "prn::*,READ");
 
         // passwordInputFileEntries.put("reader", "prn::/scope:scope1,READ;prn::/scope:scope1/stream:stream1,READ");
-        @Cleanup
-        ClusterWrapper cluster = new ClusterWrapper(true, "secret",
+        cluster = new ClusterWrapper(true, "secret",
                 600, this.preparePasswordInputFileEntries(passwordInputFileEntries), 4);
         cluster.initialize();
-
-        String scopeName = "testScope";
-        String streamName = "testStream";
-        String message = "test message";
 
         ClientConfig writerClientConfig = ClientConfig.builder()
                 .controllerURI(URI.create(cluster.controllerUri()))
@@ -78,7 +83,16 @@ public class ReadWithReadPermissionsTest {
                 new JavaSerializer<String>(),
                 EventWriterConfig.builder().build());
         writer.writeEvent(message).get();
+        log.info("Done writing a message");
+    }
 
+    @After
+    public void tearDown() {
+        cluster.close();
+    }
+
+    @Test
+    public void readUsingUserAccountsWithReadPermission() throws ExecutionException, InterruptedException {
         ClientConfig readerClientConfig = ClientConfig.builder()
                 .controllerURI(URI.create(cluster.controllerUri()))
                 .credentials(new DefaultCredentials("1111_aaaa", "reader"))
@@ -86,13 +100,13 @@ public class ReadWithReadPermissionsTest {
         @Cleanup
         EventStreamClientFactory readerClientFactory = EventStreamClientFactory.withScope(scopeName, readerClientConfig);
 
-        String readerGroup = UUID.randomUUID().toString().replace("-", "");
+        String readerGroup = "testReaderGroup";
         ReaderGroupConfig readerGroupConfig = ReaderGroupConfig.builder()
                 .stream(Stream.of(scopeName, streamName))
                 .disableAutomaticCheckpoints()
                 .build();
         @Cleanup
-        ReaderGroupManager readerGroupManager = ReaderGroupManager.withScope(scopeName, writerClientConfig);
+        ReaderGroupManager readerGroupManager = ReaderGroupManager.withScope(scopeName, readerClientConfig);
         readerGroupManager.createReaderGroup(readerGroup, readerGroupConfig);
 
         @Cleanup
