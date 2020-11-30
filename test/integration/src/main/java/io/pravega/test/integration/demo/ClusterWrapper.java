@@ -176,7 +176,7 @@ public class ClusterWrapper implements AutoCloseable {
             segmentStoreServer.close();
             serviceBuilder.close();
             zookeeperServer.close();
-            if (passwordInputFile.exists()) {
+            if (passwordInputFile != null && passwordInputFile.exists()) {
                 passwordInputFile.delete();
             }
         } catch (Exception e) {

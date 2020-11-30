@@ -43,6 +43,21 @@ import static org.junit.Assert.assertNotNull;
 public class TestUtils {
 
     /**
+     * Creates the specified {@code scope} , using the specified {@code clientConfig}.
+     *
+     * @param clientConfig the {@link ClientConfig} to use for connecting to the server
+     * @param scope the scope
+     * @return whether the scope was newly created
+     */
+    public static boolean createScope(@NonNull ClientConfig clientConfig, @NonNull String scope) {
+        @Cleanup
+        StreamManager streamManager = StreamManager.create(clientConfig);
+        assertNotNull(streamManager);
+
+        return streamManager.createScope(scope);
+    }
+
+    /**
      * Creates the specified {@code scope} and {@code streams}, using the specified {@code clientConfig}.
      *
      * Note: This method creates the streams using a scaling policy with a fixed number of segments (one each).
