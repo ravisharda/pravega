@@ -56,9 +56,7 @@ public class JwtTokenProviderImpl implements DelegationTokenProvider {
      */
     private final Controller controllerClient;
 
-    private final String scopeName;
-
-    private final String streamName;
+    private final Resource resource;
 
     private final AccessOperation accessOperation;
 
@@ -70,21 +68,19 @@ public class JwtTokenProviderImpl implements DelegationTokenProvider {
     @Getter(AccessLevel.PACKAGE)
     private final AtomicReference<CompletableFuture<Void>> tokenRefreshFuture = new AtomicReference<>();
 
-    JwtTokenProviderImpl(Controller controllerClient, String scopeName, String streamName, AccessOperation accessOperation) {
-        this(controllerClient, scopeName, streamName, ConfigurationOptionsExtractor.extractInt(
+    JwtTokenProviderImpl(Controller controllerClient, Resource resource, AccessOperation accessOperation) {
+        this(controllerClient, resource, ConfigurationOptionsExtractor.extractInt(
                 REFRESH_THRESHOLD_SYSTEM_PROPERTY, REFRESH_THRESHOLD_ENV_VARIABLE, DEFAULT_REFRESH_THRESHOLD_SECONDS),
                 accessOperation);
     }
 
-    private JwtTokenProviderImpl(Controller controllerClient, String scopeName, String streamName,
+    private JwtTokenProviderImpl(Controller controllerClient, Resource resource,
                                  int refreshThresholdInSeconds, AccessOperation accessOperation) {
-        Exceptions.checkNotNullOrEmpty(scopeName, "scopeName");
         Preconditions.checkNotNull(controllerClient, "controllerClient is null");
-        Exceptions.checkNotNullOrEmpty(streamName, "streamName");
-        Preconditions.checkNotNull(accessOperation, "accessOperation");
+        Preconditions.checkNotNull(resource, "resource is null");
+        Preconditions.checkNotNull(accessOperation, "accessOperation is null");
 
-        this.scopeName = scopeName;
-        this.streamName = streamName;
+        this.resource = resource;
         this.controllerClient = controllerClient;
         this.refreshThresholdInSeconds = refreshThresholdInSeconds;
         this.accessOperation = accessOperation;
@@ -96,12 +92,10 @@ public class JwtTokenProviderImpl implements DelegationTokenProvider {
      *
      * @param token the initial delegation token
      * @param controllerClient the {@link Controller} client used for obtaining a delegation token from the Controller
-     * @param scopeName the name of the scope tied to the segment, for which a delegation token is to be obtained
-     * @param streamName the name of the stream tied to the segment, for which a delegation token is to be obtained
+     * @param resource the {@link Resource} for which a delegation token is to be obtained
      */
-    JwtTokenProviderImpl(String token, Controller controllerClient, String scopeName,
-                                String streamName, AccessOperation accessOperation) {
-        this(token, controllerClient, scopeName, streamName, ConfigurationOptionsExtractor.extractInt(
+    JwtTokenProviderImpl(String token, Controller controllerClient, Resource resource, AccessOperation accessOperation) {
+        this(token, controllerClient, resource, ConfigurationOptionsExtractor.extractInt(
                 "pravega.client.auth.token-refresh.threshold",
                 "pravega_client_auth_token-refresh.threshold",
                 DEFAULT_REFRESH_THRESHOLD_SECONDS), accessOperation);
@@ -113,24 +107,22 @@ public class JwtTokenProviderImpl implements DelegationTokenProvider {
      *
      * @param token the initial delegation token
      * @param controllerClient the {@link Controller} client used for obtaining a delegation token from the Controller
-     * @param scopeName the name of the scope tied to the segment, for which a delegation token is to be obtained
-     * @param streamName the name of the stream tied to the segment, for which a delegation token is to be obtained
+     * @param resource the {@link Resource} for which a delegation token is to be obtained
      * @param refreshThresholdInSeconds the time in seconds before expiry that should trigger a token refresh
      */
-    JwtTokenProviderImpl(String token, Controller controllerClient, String scopeName, String streamName,
-                                    int refreshThresholdInSeconds, AccessOperation accessOperation) {
-        Exceptions.checkNotNullOrEmpty(token, "delegationToken");
-        Exceptions.checkNotNullOrEmpty(scopeName, "scopeName");
+    JwtTokenProviderImpl(String token, Controller controllerClient, Resource resource,
+                         int refreshThresholdInSeconds, AccessOperation accessOperation) {
+        Exceptions.checkNotNullOrEmpty(token, "token is null");
         Preconditions.checkNotNull(controllerClient, "controllerClient is null");
-        Exceptions.checkNotNullOrEmpty(streamName, "streamName");
+        Preconditions.checkNotNull(resource, "resource is null");
+        Preconditions.checkNotNull(accessOperation, "accessOperation is null");
 
         Long expTime = extractExpirationTime(token);
         delegationToken.set(new DelegationToken(token, expTime));
-        this.scopeName = scopeName;
-        this.streamName = streamName;
         this.controllerClient = controllerClient;
         this.refreshThresholdInSeconds = refreshThresholdInSeconds;
         this.accessOperation = accessOperation;
+        this.resource = resource;
     }
 
     /**
@@ -148,11 +140,13 @@ public class JwtTokenProviderImpl implements DelegationTokenProvider {
         } else if (currentToken.getExpiryTime() == null) {
             result = CompletableFuture.completedFuture(currentToken.getValue());
         } else if (this.tokenExpirySignal.get()) {
-            log.debug("Token was signaled as expired for scope/stream {}/{}", this.scopeName, this.streamName);
+            log.debug("Token was signaled as expired for scope/stream {}/{}",
+                    this.resource.getScope(), this.resource.getName());
             result = refreshToken();
             this.tokenExpirySignal.compareAndSet(true, false);
         } else if (isTokenNearingExpiry(currentToken)) {
-            log.debug("Token is nearing expiry for scope/stream {}/{}", this.scopeName, this.streamName);
+            log.debug("Token is nearing expiry for scope/stream {}/{}",
+                    this.resource.getScope(), this.resource.getName());
             result = refreshToken();
         } else {
             result = CompletableFuture.completedFuture(currentToken.getValue());
@@ -194,23 +188,27 @@ public class JwtTokenProviderImpl implements DelegationTokenProvider {
 
     @VisibleForTesting
     CompletableFuture<String> refreshToken() {
-        long traceEnterId = LoggerHelpers.traceEnter(log, "refreshToken", this.scopeName, this.streamName);
+        long traceEnterId = LoggerHelpers.traceEnter(log, "refreshToken", this.resource.getScope(),
+                this.resource.getName());
         CompletableFuture<Void> currentRefreshFuture = tokenRefreshFuture.get();
         if (currentRefreshFuture == null) {
-            log.debug("Initiating token refresh for scope {} and stream {}", this.scopeName, this.streamName);
+            log.debug("Initiating token refresh for scope {} and stream {}",
+                    this.resource.getScope(), this.resource.getName());
             currentRefreshFuture = this.recreateToken();
             this.tokenRefreshFuture.compareAndSet(null, currentRefreshFuture);
         } else {
-            log.debug("Token is already under refresh for scope {} and stream {}", this.scopeName, this.streamName);
+            log.debug("Token is already under refresh for scope {} and stream {}", this.resource.getScope(),
+                    this.resource.getName());
         }
 
         final CompletableFuture<Void> handleToCurrentRefreshFuture  = currentRefreshFuture;
         return currentRefreshFuture.handle((v, ex) -> {
             this.tokenRefreshFuture.compareAndSet(handleToCurrentRefreshFuture, null);
-            LoggerHelpers.traceLeave(log, "refreshToken", traceEnterId, this.scopeName, this.streamName);
+            LoggerHelpers.traceLeave(log, "refreshToken", traceEnterId, this.resource.getScope(),
+                    this.resource.getName());
             if (ex != null) {
                 log.warn("Encountered an exception in when refreshing token for scope {} and stream {}",
-                        this.scopeName, this.streamName, Exceptions.unwrap(ex));
+                        this.resource.getScope(), this.resource.getName(), Exceptions.unwrap(ex));
                 throw ex instanceof CompletionException ? (CompletionException) ex : new CompletionException(ex);
             } else {
                 return delegationToken.get().getValue();
@@ -219,7 +217,8 @@ public class JwtTokenProviderImpl implements DelegationTokenProvider {
     }
 
     private CompletableFuture<Void> recreateToken() {
-        return controllerClient.getOrRefreshDelegationTokenFor(scopeName, streamName, accessOperation)
+
+        return controllerClient.getOrRefreshDelegationTokenFor(this.resource.getScope(), this.resource.getName(), accessOperation)
                 .thenAccept(token -> this.delegationToken.set(new DelegationToken(token, extractExpirationTime(token))));
     }
 }

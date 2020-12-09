@@ -89,11 +89,12 @@ public class DelegationTokenProviderFactory {
     public static DelegationTokenProvider create(String delegationToken, Controller controller, String scopeName,
                                                  String streamName, AccessOperation accessOperation) {
         if (delegationToken == null) {
-            return new JwtTokenProviderImpl(controller, scopeName, streamName, accessOperation);
+            return new JwtTokenProviderImpl(controller, Resource.of(scopeName, streamName), accessOperation);
         } else if (delegationToken.equals("")) {
             return new EmptyTokenProviderImpl();
         } else if (delegationToken.split("\\.").length == 3) {
-            return new JwtTokenProviderImpl(delegationToken, controller, scopeName, streamName, accessOperation);
+            return new JwtTokenProviderImpl(delegationToken, controller, Resource.of(scopeName, streamName),
+                    accessOperation);
         } else {
             return new StringTokenProviderImpl(delegationToken);
         }

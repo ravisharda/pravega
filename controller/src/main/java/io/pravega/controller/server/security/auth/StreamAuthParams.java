@@ -105,8 +105,15 @@ public class StreamAuthParams {
     }
 
     private static String toResourceString(String scope, String stream, boolean isStreamInternal) {
-        return isStreamInternal ? AUTH_RESOURCE.ofInternalStream(scope, stream) :
-                AUTH_RESOURCE.ofStreamInScope(scope, stream);
+        if (isStreamInternal) {
+            return AUTH_RESOURCE.ofInternalStream(scope, stream);
+        } else {
+            if (true) {
+                return AUTH_RESOURCE.ofStreamInScope(scope, stream);
+            } else {
+                return AUTH_RESOURCE.ofKeyValueTableInScope(scope, stream);
+            }
+        }
     }
 
     public static String toResourceString(String scope, String stream) {

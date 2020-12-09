@@ -33,7 +33,7 @@ import static org.junit.Assert.assertEquals;
 public class ReadWithReadPermissionsTest {
 
     @Rule
-    public Timeout globalTimeout = Timeout.seconds(60);
+    public Timeout globalTimeout = Timeout.seconds(150);
 
     /**
      * This test verifies that data can be read from a stream using read-only permissions, if the system is configured
@@ -68,6 +68,8 @@ public class ReadWithReadPermissionsTest {
         AssertExtensions.assertThrows(StatusRuntimeException.class,
                 () -> writeThenReadDataBack(passwordInputFileEntries, false));
     }
+
+
 
     @SneakyThrows
     @Test

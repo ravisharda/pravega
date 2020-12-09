@@ -60,8 +60,8 @@ public class TokenVerifierImpl implements DelegationTokenVerifier {
                     .findFirst();
 
         if (!matchingClaim.isPresent()) {
-            log.debug(String.format("No matching claim found for resource [%s] and permission [%s] in token.",
-                        resource, expectedLevel));
+            log.debug(String.format("No matching claim found for resource [%s] and permission [%s] in token [%s].",
+                        resource, expectedLevel, token));
 
             throw new InvalidClaimException(String.format(
                         "No matching claim found for resource: [%s] and permission: [%s] in the delegation token.",

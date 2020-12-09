@@ -46,7 +46,7 @@ public class JwtTokenProviderImplTest {
     @Test
     public void testIsWithinThresholdForRefresh() {
         JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(
-                createEmptyDummyToken(), dummyController, "somescope", "somestream", AccessOperation.ANY);
+                createEmptyDummyToken(), dummyController, Resource.of("somescope", "somestream"), AccessOperation.ANY);
 
         assertFalse(objectUnderTest.isWithinRefreshThreshold(Instant.ofEpochSecond(10), Instant.ofEpochSecond(30)));
         assertFalse(objectUnderTest.isWithinRefreshThreshold(Instant.now(), Instant.now().plusSeconds(11)));
@@ -60,7 +60,7 @@ public class JwtTokenProviderImplTest {
         String token = String.format("header.%s.signature", toCompact(
                 JwtBody.builder().expirationTime(Instant.now().plusSeconds(10000).getEpochSecond()).build()));
         JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(
-                token, mock(Controller.class), "somescope", "somestream", AccessOperation.ANY);
+                token, mock(Controller.class), Resource.of("somescope", "somestream"), AccessOperation.ANY);
         assertEquals(token, objectUnderTest.retrieveToken().join());
     }
 
@@ -84,7 +84,7 @@ public class JwtTokenProviderImplTest {
 
         // Setup the object under test
         JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(
-                token, mockController, "somescope", "somestream", AccessOperation.ANY);
+                token, mockController, Resource.of("somescope", "somestream"), AccessOperation.ANY);
 
         // Act
         String newToken = objectUnderTest.retrieveToken().join();
@@ -110,7 +110,7 @@ public class JwtTokenProviderImplTest {
 
         // Setup the object under test
         DelegationTokenProvider objectUnderTest = new JwtTokenProviderImpl(mockController,
-                "somescope", "somestream", AccessOperation.ANY);
+                Resource.of("somescope", "somestream"), AccessOperation.ANY);
 
         String firstToken = objectUnderTest.retrieveToken().join();
         String secondToken = objectUnderTest.retrieveToken().join();
@@ -137,7 +137,7 @@ public class JwtTokenProviderImplTest {
 
         // Setup the object under test
         DelegationTokenProvider objectUnderTest = new JwtTokenProviderImpl(mockController,
-                "somescope", "somestream", AccessOperation.ANY);
+                Resource.of("somescope", "somestream"), AccessOperation.ANY);
 
         assertEquals(token, objectUnderTest.retrieveToken().join());
     }
@@ -145,7 +145,7 @@ public class JwtTokenProviderImplTest {
     @Test
     public void testDefaultTokenRefreshThreshold() {
         JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(
-                createEmptyDummyToken(), dummyController, "some-scope", "some-stream", AccessOperation.ANY);
+                createEmptyDummyToken(), dummyController, Resource.of("some-scope", "some-stream"), AccessOperation.ANY);
         assertSame(JwtTokenProviderImpl.DEFAULT_REFRESH_THRESHOLD_SECONDS,
                 objectUnderTest.getRefreshThresholdInSeconds());
     }
@@ -157,8 +157,8 @@ public class JwtTokenProviderImplTest {
                 .build());
         String token = String.format("header.%s.signature", encodedJwtBody);
 
-        JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(token, dummyController, "testscope",
-                "teststream", AccessOperation.ANY);
+        JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(token, dummyController, Resource.of("testscope",
+                "teststream"), AccessOperation.ANY);
         assertEquals(token, objectUnderTest.retrieveToken().join());
     }
 
@@ -177,7 +177,7 @@ public class JwtTokenProviderImplTest {
                 .thenReturn(future);
 
         // Setup the object under test
-        DelegationTokenProvider objectUnderTest = new JwtTokenProviderImpl(mockController, "somescope", "somestream", AccessOperation.ANY);
+        DelegationTokenProvider objectUnderTest = new JwtTokenProviderImpl(mockController, Resource.of("somescope", "somestream"), AccessOperation.ANY);
 
         // Act
         String token = objectUnderTest.retrieveToken().join();
@@ -188,35 +188,36 @@ public class JwtTokenProviderImplTest {
 
     @Test(expected = NullPointerException.class)
     public void testCtorRejectsNullControllerInput() {
-        new JwtTokenProviderImpl(null, "somescope", "somestream", AccessOperation.ANY);
+        new JwtTokenProviderImpl(null, Resource.of("somescope", "somestream"), AccessOperation.ANY);
     }
 
     @Test(expected = NullPointerException.class)
     public void testCtorRejectsNullScopeInput() {
-        new JwtTokenProviderImpl(dummyController, null, "somestream", AccessOperation.ANY);
+        new JwtTokenProviderImpl(dummyController, Resource.of(null, "somestream"), AccessOperation.ANY);
     }
 
     @Test(expected = NullPointerException.class)
     public void testCtorRejectsNullStreamInput() {
-        new JwtTokenProviderImpl(dummyController, "somescope", null, AccessOperation.ANY);
+        new JwtTokenProviderImpl(dummyController, Resource.of("somescope", null), AccessOperation.ANY);
     }
 
     @Test
     public void testPopulateTokenReturnsTrueWhenInputIsEmptyAndExistingTokenIsNull() {
-        JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(this.dummyController, "somescope", "somestream", AccessOperation.ANY);
+        JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(this.dummyController,
+                Resource.of("somescope", "somestream"), AccessOperation.ANY);
         assertTrue(objectUnderTest.populateToken(""));
     }
 
     @Test
     public void testPopulateTokenReturnsFalseWhenInputIsEmptyAndExistingTokenIsEmpty() {
-        JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(this.dummyController, "somescope", "somestream", AccessOperation.ANY);
+        JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(this.dummyController, Resource.of("somescope", "somestream"), AccessOperation.ANY);
         objectUnderTest.populateToken("");
         assertFalse(objectUnderTest.populateToken(""));
     }
 
     @Test
     public void testPopulateTokenReturnsFalseWhenInputIsNull() {
-        JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(this.dummyController, "somescope", "somestream", AccessOperation.ANY);
+        JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(this.dummyController, Resource.of("somescope", "somestream"), AccessOperation.ANY);
         assertFalse(objectUnderTest.populateToken(null));
     }
 
@@ -227,7 +228,7 @@ public class JwtTokenProviderImplTest {
                 "base64-encoded-signature");
 
         JwtTokenProviderImpl objectUnderTest = new JwtTokenProviderImpl(initialToken, this.dummyController,
-                "somescope", "somestream", AccessOperation.ANY);
+                Resource.of("somescope", "somestream"), AccessOperation.ANY);
 
         String newToken = String.format("%s.%s.%s", "base64-encoded-header",
                 JwtTestUtils.toCompact(JwtBody.builder().expirationTime(Instant.now().getEpochSecond()).build()),
