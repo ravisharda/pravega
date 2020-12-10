@@ -20,7 +20,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class Resource {
 
-    enum Type {
+    public enum Type {
         KEY_VALUE_TABLE,
         READER_GROUP,
         STREAM

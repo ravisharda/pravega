@@ -88,15 +88,24 @@ public class DelegationTokenProviderFactory {
      */
     public static DelegationTokenProvider create(String delegationToken, Controller controller, String scopeName,
                                                  String streamName, AccessOperation accessOperation) {
+        return create(delegationToken, controller, scopeName, streamName, Resource.Type.STREAM, accessOperation);
+    }
+
+    public static DelegationTokenProvider create(String delegationToken, Controller controller,
+                                                 String scopeName, String resourceName, Resource.Type type,
+                                                 AccessOperation accessOperation) {
         if (delegationToken == null) {
-            return new JwtTokenProviderImpl(controller, Resource.of(scopeName, streamName), accessOperation);
+            return new JwtTokenProviderImpl(controller, Resource.of(scopeName, resourceName, type), accessOperation);
         } else if (delegationToken.equals("")) {
             return new EmptyTokenProviderImpl();
         } else if (delegationToken.split("\\.").length == 3) {
-            return new JwtTokenProviderImpl(delegationToken, controller, Resource.of(scopeName, streamName),
+            return new JwtTokenProviderImpl(delegationToken, controller, Resource.of(scopeName, resourceName, type),
                     accessOperation);
         } else {
             return new StringTokenProviderImpl(delegationToken);
         }
+
     }
+
+
 }
